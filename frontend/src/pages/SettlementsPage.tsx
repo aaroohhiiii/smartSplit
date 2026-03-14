@@ -5,6 +5,7 @@ import { useAuth } from '@clerk/clerk-react';
 interface ExpenseItem { id: string; name: string; amount: number; category: string; }
 interface Expense { id: string; title: string; paidBy: string; totalAmount: number; taxAmount: number; items: ExpenseItem[]; createdAt: string; }
 interface Settlement { from: string; to: string; amount: number; }
+interface DishBreakdown { dishName: string; category: string; totalAmount: number; eligibleMembers: string[]; perPersonCost: number; }
 
 export default function SettlementsPage() {
   const { groupId } = useParams<{ groupId: string }>();
@@ -13,45 +14,75 @@ export default function SettlementsPage() {
 
   const [expenses,      setExpenses]      = useState<Expense[]>([]);
   const [settlements,   setSettlements]   = useState<Settlement[]>([]);
+  const [dishBreakdowns, setDishBreakdowns] = useState<DishBreakdown[]>([]);
   const [groupName,     setGroupName]     = useState('');
   const [members,       setMembers]       = useState<any[]>([]);
   const [initialPayer,  setInitialPayer]  = useState('');
   const [currency,      setCurrency]      = useState('INR');
   const [loading,       setLoading]       = useState(true);
   const [error,         setError]         = useState('');
+  const [isRefetching,  setIsRefetching]  = useState(false);
+  const [retryCount,    setRetryCount]    = useState(0);
 
   useEffect(() => {
-    (async () => {
-      try {
-        const token = await getToken();
-        if (!token || !groupId) return;
-
-        const [groupRes, expRes] = await Promise.all([
-          fetch(`${import.meta.env.VITE_API_URL}/api/v1/groups/${groupId}`,          { headers: { Authorization: `Bearer ${token}` } }),
-          fetch(`${import.meta.env.VITE_API_URL}/api/v1/groups/${groupId}/expenses`, { headers: { Authorization: `Bearer ${token}` } }),
-        ]);
-
-        if (!groupRes.ok) throw new Error('Failed to fetch group');
-        if (!expRes.ok)   throw new Error('Failed to fetch expenses');
-
-        const groupData = await groupRes.json();
-        const expData   = await expRes.json();
-        const mems      = groupData.members || [];
-        const exps      = expData.expenses  || [];
-
-        setGroupName(groupData.name);
-        setMembers(mems);
-        setInitialPayer(groupData.initialPayer || '');
-        setCurrency(groupData.currency || 'INR');
-        setExpenses(exps);
-        setSettlements(calcSettlements(exps, mems));
-      } catch (e: any) {
-        setError(e.message);
-      } finally {
-        setLoading(false);
-      }
-    })();
+    fetchData();
   }, [groupId, getToken]);
+
+  // Auto-refetch if no expenses found (data might not be persisted yet)
+  useEffect(() => {
+    if (!loading && expenses.length === 0 && !error && retryCount < 5) {
+      const timer = setTimeout(() => {
+        console.log('[SETTLEMENTS] No expenses found, auto-refetching... (attempt', retryCount + 1, ')');
+        setRetryCount(retryCount + 1);
+        fetchData();
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [loading, expenses.length, error, retryCount]);
+
+  const fetchData = async () => {
+    try {
+      const token = await getToken();
+      if (!token || !groupId) return;
+
+      console.log('[SETTLEMENTS] Fetching data for group:', groupId);
+      
+      const [groupRes, expRes] = await Promise.all([
+        fetch(`${import.meta.env.VITE_API_URL}/api/v1/groups/${groupId}`,          { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${import.meta.env.VITE_API_URL}/api/v1/groups/${groupId}/expenses`, { headers: { Authorization: `Bearer ${token}` } }),
+      ]);
+
+      if (!groupRes.ok) throw new Error('Failed to fetch group');
+      if (!expRes.ok)   throw new Error('Failed to fetch expenses');
+
+      const groupData = await groupRes.json();
+      const expData   = await expRes.json();
+      const mems      = groupData.members || [];
+      const exps      = Array.isArray(expData) ? expData : (expData.expenses || []);
+
+      console.log('[SETTLEMENTS] Fetched expenses:', exps.length, 'Total items:', exps.reduce((sum: number, e: any) => sum + (e.items?.length || 0), 0));
+
+      setGroupName(groupData.name);
+      setMembers(mems);
+      setInitialPayer(groupData.initialPayer || '');
+      setCurrency(groupData.currency || 'INR');
+      setExpenses(exps);
+      setSettlements(calcSettlements(exps, mems));
+      setDishBreakdowns(calcDishBreakdowns(exps, mems));
+      setError('');
+    } catch (e: any) {
+      console.error('[SETTLEMENTS] Fetch error:', e);
+      setError(e.message);
+    } finally {
+      setLoading(false);
+      setIsRefetching(false);
+    }
+  };
+
+  const handleRefetch = async () => {
+    setIsRefetching(true);
+    await fetchData();
+  };
 
   const calcSettlements = (exps: Expense[], mems: any[]): Settlement[] => {
     const bal: Record<string, number> = {};
@@ -88,6 +119,31 @@ export default function SettlementsPage() {
     return list;
   };
 
+  const calcDishBreakdowns = (exps: Expense[], mems: any[]): DishBreakdown[] => {
+    const dishes: DishBreakdown[] = [];
+    exps.forEach(exp => {
+      exp.items?.forEach(item => {
+        let eligible = mems.filter((m: any) => {
+          switch (item.category?.toUpperCase()) {
+            case 'NON_VEG': return !m.isVegetarian;
+            case 'ALCOHOL': return m.drinksAlcohol;
+            default:        return true;
+          }
+        });
+        if (!eligible.length) eligible = mems;
+        const perPersonCost = Number(item.amount) / eligible.length;
+        dishes.push({
+          dishName: item.name,
+          category: item.category?.toUpperCase() || 'SHARED',
+          totalAmount: Number(item.amount),
+          eligibleMembers: eligible.map((m: any) => m.name || m.userId),
+          perPersonCost: parseFloat(perPersonCost.toFixed(2))
+        });
+      });
+    });
+    return dishes;
+  };
+
   const getName = (uid: string) => members.find((m: any) => m.userId === uid)?.name || uid;
   const sym     = { INR: '₹', USD: '$', EUR: '€' }[currency] ?? '₹';
   const fmt     = (n: number) => n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -111,7 +167,7 @@ export default function SettlementsPage() {
         .p::before{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");pointer-events:none;z-index:0;opacity:.4;}
         .w{max-width:860px;margin:0 auto;position:relative;z-index:1;}
 
-        .hdr{display:flex;align-items:flex-start;gap:20px;margin-bottom:52px;animation:fu .45s .05s both;}
+        .hdr{display:flex;align-items:flex-start;gap:20px;margin-bottom:52px;animation:fu .45s .05s both;justify-content:space-between;}
         .back{width:40px;height:40px;border:1px solid var(--b);background:var(--s);color:var(--gold);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:16px;font-family:inherit;transition:border-color .2s,background .2s,transform .15s;flex-shrink:0;margin-top:6px;}
         .back:hover{border-color:var(--gold);background:var(--s2);transform:translateX(-3px);}
         .ey{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--m);margin-bottom:6px;}
@@ -172,6 +228,22 @@ export default function SettlementsPage() {
         .em2{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--m);}
         .ea{font-family:'Playfair Display',serif;font-size:18px;font-weight:700;color:var(--gold);white-space:nowrap;}
 
+        .dishes{display:flex;flex-direction:column;gap:1px;background:var(--b);margin-bottom:48px;animation:fu .45s .48s both;}
+        .dish{background:var(--s);padding:20px 28px;transition:background .15s;}
+        .dish:hover{background:var(--s2);}
+        .dish-header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:14px;}
+        .dish-name{font-size:14px;font-weight:500;color:var(--t);margin-bottom:4px;}
+        .dish-category{font-family:'DM Mono',monospace;font-size:8px;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);}
+        .dish-amount{font-family:'Playfair Display',serif;font-size:18px;font-weight:700;color:var(--gold);white-space:nowrap;}
+        .dish-amount small{font-size:11px;margin-right:2px;}
+        .dish-split{border-top:1px solid var(--b);padding-top:14px;}
+        .split-label{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--m);margin-bottom:10px;}
+        .split-members{display:flex;flex-direction:column;gap:6px;}
+        .split-member{display:flex;justify-content:space-between;align-items:center;padding:6px 0;font-size:13px;}
+        .member-name{color:var(--t);font-weight:500;}
+        .member-cost{font-family:'DM Mono',monospace;color:var(--gold);font-size:12px;}
+        .member-cost small{font-size:9px;margin-right:1px;}
+
         .settled{border:1px dashed var(--b);background:var(--s);padding:80px 32px;text-align:center;margin-bottom:48px;animation:fu .45s .28s both;position:relative;overflow:hidden;}
         .settled::before{content:'';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:320px;height:200px;background:radial-gradient(ellipse,rgba(212,168,71,.06) 0%,transparent 70%);pointer-events:none;}
         .si{font-size:32px;display:block;margin-bottom:16px;color:var(--gold);}
@@ -184,6 +256,8 @@ export default function SettlementsPage() {
         .btn{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--bg);background:var(--gold);border:none;padding:16px 32px;cursor:pointer;display:inline-flex;align-items:center;gap:10px;transition:background .2s,transform .15s;}
         .btn:hover{background:var(--gl);transform:translateY(-2px);}
         .btn .ar{transition:transform .2s;}.btn:hover .ar{transform:translateX(4px);}
+        .btn.refetch{padding:10px 16px;font-size:10px;margin-left:auto;}
+        .btn.refetch:disabled{opacity:.6;cursor:not-allowed;transform:none;}
 
         .ld{text-align:center;padding:120px 24px;font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--m);}
         .err{border:1px solid var(--red);background:rgba(248,113,113,.06);padding:16px 24px;margin-top:24px;font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--red);}
@@ -205,6 +279,11 @@ export default function SettlementsPage() {
                 {loading ? 'Loading…' : <em>{groupName}</em>}
               </div>
             </div>
+            {!loading && expenses.length === 0 && (
+              <button className="btn refetch" onClick={handleRefetch} disabled={isRefetching}>
+                {isRefetching ? '↻' : '↻'} Refresh
+              </button>
+            )}
           </div>
 
           {loading && <div className="ld">Calculating settlements…</div>}
@@ -308,6 +387,40 @@ export default function SettlementsPage() {
                           <div className="em2">Paid by {getName(exp.paidBy)} · {exp.items?.length || 0} items</div>
                         </div>
                         <div className="ea">{sym}{fmt(Number(exp.totalAmount))}</div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {/* DISH BREAKDOWN */}
+              {dishBreakdowns.length > 0 && (
+                <>
+                  <div className="sh" style={{ animationDelay: '0.48s' }}>
+                    <div className="sl">Dish-wise splitting</div>
+                    <div className="sc">{dishBreakdowns.length} item{dishBreakdowns.length !== 1 ? 's' : ''}</div>
+                  </div>
+                  <div className="dishes">
+                    {dishBreakdowns.map((dish, i) => (
+                      <div className="dish" key={i} style={{ animationDelay: `${0.48 + i * 0.05}s` }}>
+                        <div className="dish-header">
+                          <div>
+                            <div className="dish-name">{dish.dishName}</div>
+                            <div className="dish-category">{dish.category}</div>
+                          </div>
+                          <div className="dish-amount"><small>{sym}</small>{fmt(dish.totalAmount)}</div>
+                        </div>
+                        <div className="dish-split">
+                          <div className="split-label">Divided among {dish.eligibleMembers.length} {dish.eligibleMembers.length === 1 ? 'person' : 'people'}</div>
+                          <div className="split-members">
+                            {dish.eligibleMembers.map((member, idx) => (
+                              <div className="split-member" key={idx}>
+                                <span className="member-name">{member}</span>
+                                <span className="member-cost"><small>{sym}</small>{fmt(dish.perPersonCost)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
                       </div>
                     ))}
                   </div>

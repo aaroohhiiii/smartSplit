@@ -549,8 +549,11 @@ function BillUploadModal({
 
       console.log('[SETTLE] Expense created successfully');
 
-      // Close modal and redirect
+      // Close modal and redirect with a small delay to ensure data is persisted
       onClose();
+      
+      // Wait a moment for the backend to process the expense
+      await new Promise(resolve => setTimeout(resolve, 800));
 
       // Redirect to settlement page using React Router
       navigate(`/group/${groupId}/settlement`);
