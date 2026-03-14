@@ -73,11 +73,48 @@ async function request<T>(
 }
 
 export const groupService = {
-  createGroup: (token: string | null, data: { name: string; description?: string; currency: string }) => {
+  createGroup: (token: string | null, data: { name: string; description?: string; currency: string; initialPayer?: string }) => {
     if (!token) {
       throw new Error("Authentication required. Please sign in.");
     }
     return request<Group>("/groups", token, { method: "POST", body: JSON.stringify(data) });
+  },
+
+  createGroupWithBill: async (
+    token: string | null,
+    data: { name: string; description?: string; currency: string },
+    billFile?: File
+  ): Promise<Group> => {
+    if (!token) {
+      throw new Error("Authentication required. Please sign in.");
+    }
+
+    const formData = new FormData();
+    formData.append("name", data.name);
+    if (data.description) {
+      formData.append("description", data.description);
+    }
+    formData.append("currency", data.currency);
+    if (billFile) {
+      formData.append("bill", billFile);
+    }
+
+    const headers = new Headers();
+    headers.set("Authorization", `Bearer ${token}`);
+
+    const url = `${BASE}/groups`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers,
+      body: formData,
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err?.error?.message || "Failed to create group");
+    }
+
+    return res.json();
   },
 
   listGroups: (token: string | null, userId: string) =>

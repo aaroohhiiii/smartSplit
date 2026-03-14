@@ -62,13 +62,15 @@ const calculateSplitSummary = async (expenseId: string) => {
 
 export const createExpense = async (req: Request, res: Response) => {
   try {
-    const { groupId, title, paidBy, currency, items, taxAmount = 0 } = req.body;
-    const createdBy = req.auth?.userId; // Use authenticated user ID
+    const { groupId } = req.params; // Extract from URL params
+    const { title, paidBy, items, taxAmount = 0 } = req.body;
+    // Use authenticated user ID, fallback to paidBy if not available
+    const createdBy = req.auth?.userId || paidBy;
 
     // Basic validations
-    if (!groupId || !title || !paidBy || !currency || !items || items.length === 0) {
+    if (!groupId || !title || !paidBy || !items || items.length === 0) {
       return res.status(400).json({
-        error: { code: "MISSING_FIELDS", message: "groupId, title, paidBy, currency, and items (non-empty array) are required" },
+        error: { code: "MISSING_FIELDS", message: "groupId (in URL), title, paidBy, and items (non-empty array) are required" },
       });
     }
 
@@ -81,10 +83,6 @@ export const createExpense = async (req: Request, res: Response) => {
     const group = await prisma.group.findUnique({ where: { id: groupId } });
     if (!group) {
       return res.status(404).json({ error: { code: "GROUP_NOT_FOUND", message: "Group does not exist" } });
-    }
-
-    if (currency !== group.currency) {
-      return res.status(400).json({ error: { code: "CURRENCY_MISMATCH", message: "Expense currency must match group currency" } });
     }
 
     const paidByMember = await prisma.groupMember.findFirst({ where: { groupId, userId: paidBy } });
@@ -128,7 +126,7 @@ export const createExpense = async (req: Request, res: Response) => {
         groupId: groupId as string,
         title: title as string,
         paidBy: paidBy as string,
-        currency: currency as string,
+        currency: group.currency,
         createdBy: createdBy as string,
         taxAmount: parseFloat(taxAmount as string),
         items: {

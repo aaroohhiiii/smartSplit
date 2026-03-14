@@ -1,0 +1,448 @@
+/* ═══════════════════════════════════════════════════════════════════════════ */
+/* Settlements Page CSS - Modern Fintech Dashboard Style                       */
+/* ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  --bg: #0a0e27;
+  --surface: #12172f;
+  --surface-hover: #1a1f3a;
+  --border: #1e2a4a;
+  --text: #f5f7fa;
+  --text-secondary: #9ca3af;
+  --gold: #fbbf24;
+  --gold-dim: rgba(251, 191, 36, 0.1);
+  --gold-light: rgba(251, 191, 36, 0.2);
+  --green: #10b981;
+  --red: #ef4444;
+  --shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 20px 50px rgba(0, 0, 0, 0.5);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────── */
+/* Page Container */
+/* ─────────────────────────────────────────────────────────────────────────── */
+
+.settlements-page {
+  min-height: 100vh;
+  background: linear-gradient(135deg, var(--bg) 0%, #0f1428 100%);
+  padding: 24px 16px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segment UI', 'Roboto', sans-serif;
+  color: var(--text);
+}
+
+.settlements-container {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────── */
+/* Header */
+/* ─────────────────────────────────────────────────────────────────────────── */
+
+.settlements-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 40px;
+  padding-top: 16px;
+}
+
+.back-button {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--gold);
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-size: 0;
+}
+
+.back-button:hover {
+  background: var(--surface-hover);
+  border-color: var(--gold);
+  transform: translateX(-4px);
+}
+
+.back-button svg {
+  font-size: 20px;
+}
+
+.header-content {
+  flex: 1;
+}
+
+.group-title {
+  font-size: 36px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  line-height: 1.2;
+  margin-bottom: 4px;
+}
+
+.header-subtitle {
+  font-size: 14px;
+  color: var(--text-secondary);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────── */
+/* Bill Summary Card */
+/* ─────────────────────────────────────────────────────────────────────────── */
+
+.bill-summary-card {
+  background: linear-gradient(135deg, var(--surface) 0%, var(--surface-hover) 100%);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 28px 24px;
+  margin-bottom: 40px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  transition: all 0.3s ease;
+}
+
+.bill-summary-card:hover {
+  border-color: var(--gold);
+  box-shadow: 0 12px 32px rgba(251, 191, 36, 0.15);
+  transform: translateY(-2px);
+}
+
+.summary-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 12px;
+}
+
+.summary-content {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.paid-by-name {
+  font-size: 28px;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--gold) 0%, #fcd34d 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.paid-amount {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--gold);
+}
+
+.summary-description {
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────── */
+/* Empty State */
+/* ─────────────────────────────────────────────────────────────────────────── */
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--gold-dim) 0%, transparent 100%);
+  border: 2px dashed var(--border);
+  border-radius: 16px;
+  padding: 60px 24px;
+  text-align: center;
+  margin-bottom: 40px;
+}
+
+.empty-state-icon {
+  width: 64px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--gold-light);
+  border-radius: 12px;
+  margin-bottom: 20px;
+  color: var(--gold);
+}
+
+.empty-state-title {
+  font-size: 24px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  color: var(--gold);
+}
+
+.empty-state-subtitle {
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────── */
+/* Settlements Section */
+/* ─────────────────────────────────────────────────────────────────────────── */
+
+.settlements-section {
+  margin-bottom: 40px;
+}
+
+.section-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 16px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.settlements-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+@media (min-width: 768px) {
+  .settlements-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────── */
+/* Settlement Card */
+/* ─────────────────────────────────────────────────────────────────────────── */
+
+.settlement-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: all 0.3s ease;
+}
+
+.settlement-card:hover {
+  background: var(--surface-hover);
+  border-color: var(--gold);
+  box-shadow: 0 8px 20px rgba(251, 191, 36, 0.1);
+  transform: translateY(-2px);
+}
+
+.settlement-flow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+
+.debtor-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.flow-arrow {
+  flex-shrink: 0;
+  color: var(--gold);
+  opacity: 0.7;
+}
+
+.creditor-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--gold);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.settlement-amount {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--gold);
+  background: linear-gradient(135deg, var(--gold-light) 0%, transparent 100%);
+  padding: 8px 12px;
+  border-radius: 8px;
+  flex-shrink: 0;
+  text-align: right;
+  min-width: max-content;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────── */
+/* Footer */
+/* ─────────────────────────────────────────────────────────────────────────── */
+
+.settlements-footer {
+  display: flex;
+  justify-content: center;
+  padding: 24px 0;
+  border-top: 1px solid var(--border);
+  margin-top: 40px;
+}
+
+.continue-button {
+  background: linear-gradient(135deg, var(--gold) 0%, #fcd34d 100%);
+  color: var(--bg);
+  border: none;
+  border-radius: 12px;
+  padding: 14px 32px;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 8px 20px rgba(251, 191, 36, 0.25);
+  text-transform: uppercase;
+}
+
+.continue-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 30px rgba(251, 191, 36, 0.35);
+}
+
+.continue-button:active {
+  transform: translateY(0);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────── */
+/* Loading & Error States */
+/* ─────────────────────────────────────────────────────────────────────────── */
+
+.loading,
+.error-message {
+  text-align: center;
+  padding: 60px 24px;
+  font-size: 16px;
+  color: var(--text-secondary);
+}
+
+.error-message {
+  color: var(--red);
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid var(--red);
+  border-radius: 12px;
+  margin-top: 24px;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────── */
+/* Responsive Design */
+/* ─────────────────────────────────────────────────────────────────────────── */
+
+@media (max-width: 480px) {
+  .settlements-page {
+    padding: 16px 12px;
+  }
+
+  .group-title {
+    font-size: 28px;
+  }
+
+  .settlements-header {
+    margin-bottom: 32px;
+  }
+
+  .bill-summary-card {
+    padding: 20px 16px;
+    margin-bottom: 32px;
+  }
+
+  .paid-by-name {
+    font-size: 24px;
+  }
+
+  .paid-amount {
+    font-size: 20px;
+  }
+
+  .settlement-card {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .settlement-flow {
+    width: 100%;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .flow-arrow {
+    transform: rotate(90deg);
+    opacity: 0.5;
+  }
+
+  .settlement-amount {
+    width: 100%;
+    text-align: right;
+  }
+
+  .continue-button {
+    width: 100%;
+    padding: 16px 24px;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────── */
+/* Animations */
+/* ─────────────────────────────────────────────────────────────────────────── */
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.settlement-card {
+  animation: slideDown 0.3s ease forwards;
+}
+
+.settlement-card:nth-child(1) {
+  animation-delay: 0.05s;
+}
+
+.settlement-card:nth-child(2) {
+  animation-delay: 0.1s;
+}
+
+.settlement-card:nth-child(3) {
+  animation-delay: 0.15s;
+}
+
+.settlement-card:nth-child(4) {
+  animation-delay: 0.2s;
+}
+
+.settlement-card:nth-child(5) {
+  animation-delay: 0.25s;
+}

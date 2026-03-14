@@ -30,8 +30,8 @@ app.get('/api/v1/health', (_req: Request, res: Response) => {
 // ─── Routes (auth applied selectively per route) ──────────────────────────
 // GET routes (no auth needed)
 app.use("/api/v1/groups", groupRoutes);
-app.use("/api/v1/expenses", expenseRoutes);
-app.use("/api/v1/bills", billRoutes);
+app.use("/api/v1/groups/:groupId/bills", billRoutes);
+app.use("/api/v1/groups", expenseRoutes);
 app.use("/api/v1/settlements", settlementRoutes);
 
 // ─── Error handling ───────────────────────────────────────────────────────

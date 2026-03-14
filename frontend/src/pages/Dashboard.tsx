@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@clerk/clerk-react';
+import { useNavigate } from 'react-router-dom';
 import { groupService, type Group } from '../services/groupService';
 
 // ─── Add Member Modal ────────────────────────────────────────────────────────
@@ -14,19 +15,19 @@ function AddMemberModal({
   onClose: () => void;
   onAdded: () => void;
 }) {
-  const [userId, setUserId] = useState('');
+  const [email, setEmail] = useState('');
   const [isVegetarian, setIsVegetarian] = useState(false);
   const [drinksAlcohol, setDrinksAlcohol] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   const submit = async () => {
-    if (!userId.trim() || !token) return;
+    if (!email.trim() || !token) return;
     setLoading(true);
     setError('');
     try {
       await groupService.addGroupMember(token, groupId, {
-        userId: userId.trim(),
+        userId: email.trim(),
         preferences: { isVegetarian, drinksAlcohol },
       });
       onAdded();
@@ -52,8 +53,8 @@ function AddMemberModal({
             </div>
           )}
           <div className="form-field">
-            <label className="form-label">User ID</label>
-            <input className="form-input" placeholder="Clerk user ID" value={userId} onChange={e => setUserId(e.target.value)} />
+            <label className="form-label">Email Address</label>
+            <input className="form-input" placeholder="member@example.com" type="email" value={email} onChange={e => setEmail(e.target.value)} />
           </div>
           <div className="form-field">
             <label className="form-label">Dietary Preferences</label>
@@ -109,6 +110,36 @@ function GroupDetailDrawer({
   const [showAddMember, setShowAddMember] = useState(false);
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [error, setError] = useState('');
+  const [showUploadBill, setShowUploadBill] = useState(false);
+  const [expenses, setExpenses] = useState<any[]>([]);
+  const [loadingExpenses, setLoadingExpenses] = useState(false);
+
+  // Fetch expenses for this group
+  React.useEffect(() => {
+    if (!token || !group.id) return;
+    
+    const fetchExpenses = async () => {
+      setLoadingExpenses(true);
+      try {
+        const res = await fetch(
+          `${import.meta.env.VITE_API_URL}/api/v1/groups/${group.id}/expenses`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          }
+        );
+        if (res.ok) {
+          const data = await res.json();
+          setExpenses(data.expenses || []);
+        }
+      } catch (e) {
+        console.error('[DRAWER] Error fetching expenses:', e);
+      } finally {
+        setLoadingExpenses(false);
+      }
+    };
+
+    fetchExpenses();
+  }, [group.id, token]);
 
   const removeMember = async (memberId: string) => {
     if (!token) return;
@@ -144,15 +175,42 @@ function GroupDetailDrawer({
           </div>
 
           {/* Meta */}
-          <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', gap: 24 }}>
-            <div>
-              <div className="stat-cell-label" style={{ marginBottom: 4 }}>Currency</div>
-              <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 13, color: 'var(--gold)' }}>{group.currency}</div>
+          <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)' }}>
+            <div style={{ display: 'flex', gap: 24, marginBottom: 16 }}>
+              <div>
+                <div className="stat-cell-label" style={{ marginBottom: 4 }}>Currency</div>
+                <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 13, color: 'var(--gold)' }}>{group.currency}</div>
+              </div>
+              <div>
+                <div className="stat-cell-label" style={{ marginBottom: 4 }}>Members</div>
+                <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 20, fontWeight: 900, color: 'var(--text)' }}>{group.members.length}</div>
+              </div>
             </div>
-            <div>
-              <div className="stat-cell-label" style={{ marginBottom: 4 }}>Members</div>
-              <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 20, fontWeight: 900, color: 'var(--text)' }}>{group.members.length}</div>
-            </div>
+            {(group as any).initialPayer && (
+              <div style={{ paddingTop: 12, borderTop: '1px solid var(--border)' }}>
+                <div className="stat-cell-label" style={{ marginBottom: 4 }}>Who Paid the Bill</div>
+                <div style={{ fontSize: 13, fontFamily: 'Instrument Sans, sans-serif', fontWeight: 600 }}>{(group as any).initialPayer}</div>
+              </div>
+            )}
+          </div>
+
+          {/* Bill Upload Button */}
+          <div style={{ padding: '12px 24px', borderBottom: '1px solid var(--border)' }}>
+            <button
+              className="btn-gold"
+              style={{
+                width: '100%',
+                padding: '12px 16px',
+                fontFamily: 'DM Mono, monospace',
+                fontSize: 11,
+                textTransform: 'uppercase',
+                letterSpacing: '0.1em',
+                cursor: 'pointer',
+              }}
+              onClick={() => setShowUploadBill(true)}
+            >
+              📸 Upload Bill
+            </button>
           </div>
 
           {error && (
@@ -211,6 +269,68 @@ function GroupDetailDrawer({
               </div>
             ))}
           </div>
+
+          {/* Recent Bills Section */}
+          {expenses.length > 0 && (
+            <div style={{ padding: '16px 24px', borderTop: '1px solid var(--border)' }}>
+              <div className="section-label" style={{ marginBottom: 12 }}>📄 Recent Bills</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxHeight: 200, overflowY: 'auto' }}>
+                {expenses.slice(0, 3).map((exp: any) => (
+                  <div
+                    key={exp.id}
+                    style={{
+                      background: 'var(--bg)',
+                      border: '1px solid var(--border)',
+                      borderRadius: '6px',
+                      padding: '12px',
+                      fontSize: '12px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                      <span style={{ fontWeight: '600' }}>{exp.title}</span>
+                      <span style={{ color: 'var(--gold)', fontWeight: '700' }}>₹{Number(exp.totalAmount).toFixed(2)}</span>
+                    </div>
+                    {exp.items && exp.items.length > 0 && (
+                      <div style={{ fontSize: '11px', color: 'var(--muted)' }}>
+                        {exp.items.map((item: any, idx: number) => (
+                          <div key={idx} style={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <span>{item.name}</span>
+                            <span>₹{Number(item.amount).toFixed(2)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Expense Summary Section */}
+          <div style={{ padding: '20px 24px', borderTop: '1px solid var(--border)' }}>
+            <div className="section-label" style={{ marginBottom: 12 }}>💸 Expense Summary</div>
+            <div style={{ fontSize: '12px', lineHeight: '1.8', color: 'var(--muted)' }}>
+              <p style={{ marginBottom: '8px' }}>
+                Click <strong style={{ color: 'var(--gold)' }}>Upload Bill</strong> to start splitting expenses, or view the{' '}
+                <button
+                  onClick={() => {
+                    window.location.href = `/group/${group.id}/settlement`;
+                  }}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--gold)',
+                    cursor: 'pointer',
+                    textDecoration: 'underline',
+                    fontWeight: '600',
+                  }}
+                >
+                  settlement summary
+                </button>
+                {' '}to see who owes whom.
+              </p>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -223,6 +343,15 @@ function GroupDetailDrawer({
         />
       )}
 
+      {showUploadBill && (
+        <BillUploadModal
+          groupId={group.id}
+          group={group}
+          token={token}
+          onClose={() => setShowUploadBill(false)}
+        />
+      )}
+
       <style>{`
         @keyframes slideInRight {
           from { transform: translateX(40px); opacity: 0; }
@@ -230,6 +359,481 @@ function GroupDetailDrawer({
         }
       `}</style>
     </>
+  );
+}
+
+// ─── Bill Upload Modal ──────────────────────────────────────────────────────
+function BillUploadModal({
+  groupId,
+  group,
+  token,
+  onClose,
+}: {
+  groupId: string;
+  group: any;
+  token: string | null;
+  onClose: () => void;
+}) {
+  const navigate = useNavigate();
+  const [billFile, setBillFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState<string>('');
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState(false);
+  const [billId, setBillId] = useState<string | null>(null);
+  const [parsing, setParsing] = useState(false);
+  const [parsedItems, setParsedItems] = useState<any[]>([]);
+  const [totalAmount, setTotalAmount] = useState(0);
+  const [settling, setSettling] = useState(false);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const validTypes = ['image/jpeg', 'image/png', 'application/pdf'];
+    if (!validTypes.includes(file.type)) {
+      setError('Only JPEG, PNG, and PDF files are supported');
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      setError('File size must be less than 10MB');
+      return;
+    }
+
+    setBillFile(file);
+    setError('');
+
+    if (file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setPreview(e.target?.result as string);
+      };
+      reader.readAsDataURL(file);
+    } else {
+      setPreview('📄 PDF Document');
+    }
+  };
+
+  // Poll for bill parsing results
+  const pollBillStatus = async (bId: string) => {
+    setParsing(true);
+    setError('');
+    let attempts = 0;
+    const maxAttempts = 60; // 5 minutes with 5-second intervals
+
+    const poll = async () => {
+      try {
+        const response = await fetch(
+          `${import.meta.env.VITE_API_URL}/api/v1/groups/${groupId}/bills/${bId}/status`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error('Failed to get bill status');
+        }
+
+        const data = await response.json();
+        console.log('[BILL STATUS]', data);
+
+        if (data.status === 'COMPLETED') {
+          setParsedItems(data.parsedItems || []);
+          setTotalAmount(data.totalDetectedAmount || 0);
+          setParsing(false);
+          return;
+        }
+
+        if (data.status === 'FAILED') {
+          setError(data.error?.message || 'Bill parsing failed');
+          setParsing(false);
+          return;
+        }
+
+        // Still processing, retry
+        attempts++;
+        if (attempts < maxAttempts) {
+          setTimeout(poll, 5000); // Poll every 5 seconds
+        } else {
+          setError('Bill parsing took too long. Please try again.');
+          setParsing(false);
+        }
+      } catch (e: any) {
+        console.error('[POLL ERROR]', e);
+        attempts++;
+        if (attempts < maxAttempts) {
+          setTimeout(poll, 5000);
+        } else {
+          setError(e.message || 'Failed to check bill status');
+          setParsing(false);
+        }
+      }
+    };
+
+    poll();
+  };
+
+  const handleSettleBill = async () => {
+    if (!parsedItems.length || !token || !group) return;
+
+    setSettling(true);
+    setError('');
+
+    try {
+      console.log('[SETTLE] Creating expense from parsed bill...');
+
+      // Get members from group
+      const members = group.members || [];
+
+      // Smart split based on preferences
+      const expenseItems = parsedItems.map((item: any) => {
+        let sharedBy: string[] = [];
+
+        switch (item.category) {
+          case 'VEG':
+            // All members can share vegetarian items
+            sharedBy = members.map((m: any) => m.userId);
+            break;
+          case 'NON_VEG':
+            // Only non-vegetarians
+            sharedBy = members.filter((m: any) => !m.isVegetarian).map((m: any) => m.userId);
+            if (sharedBy.length === 0) sharedBy = members.map((m: any) => m.userId); // Fallback
+            break;
+          case 'ALCOHOL':
+            // Only drinkers
+            sharedBy = members.filter((m: any) => m.drinksAlcohol).map((m: any) => m.userId);
+            if (sharedBy.length === 0) sharedBy = members.map((m: any) => m.userId); // Fallback
+            break;
+          default:
+            // Shared items - all members
+            sharedBy = members.map((m: any) => m.userId);
+        }
+
+        return {
+          name: item.name,
+          amount: item.amount,
+          category: item.category,
+          sharedBy,
+        };
+      });
+
+      console.log('[SETTLE] Expense items:', expenseItems);
+
+      // Create expense
+      const expenseRes = await fetch(
+        `${import.meta.env.VITE_API_URL}/api/v1/groups/${groupId}/expenses`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            title: 'Bill Split',
+            description: `Bill split from uploaded receipt on ${new Date().toLocaleDateString()}`,
+            paidBy: members[0]?.userId || 'unknown',
+            items: expenseItems,
+            totalAmount,
+            taxAmount: 0,
+          }),
+        }
+      );
+
+      if (!expenseRes.ok) {
+        const errData = await expenseRes.json();
+        throw new Error(errData.error?.message || 'Failed to create expense');
+      }
+
+      console.log('[SETTLE] Expense created successfully');
+
+      // Close modal and redirect
+      onClose();
+
+      // Redirect to settlement page using React Router
+      navigate(`/group/${groupId}/settlement`);
+    } catch (e: any) {
+      console.error('[SETTLE] Error:', e);
+      setError(e.message);
+    } finally {
+      setSettling(false);
+    }
+  };
+
+  const handleUpload = async () => {
+    if (!billFile || !token) return;
+
+    setUploading(true);
+    setError('');
+
+    try {
+      const formData = new FormData();
+      formData.append('bill', billFile);
+
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/api/v1/groups/${groupId}/bills/upload-bill`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          body: formData,
+        }
+      );
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error?.message || 'Upload failed');
+      }
+
+      const data = await response.json();
+      setBillId(data.billId);
+      setSuccess(true);
+
+      // Start polling for results
+      setTimeout(() => pollBillStatus(data.billId), 1000);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="modal-box" style={{ maxWidth: 500 }}>
+        <div className="modal-header">
+          <div className="modal-title">Upload <em>Bill</em></div>
+          <button className="modal-close" onClick={onClose}>✕</button>
+        </div>
+
+        <div className="modal-body">
+          {parsing ? (
+            <div style={{
+              textAlign: 'center',
+              padding: '40px 20px',
+            }}>
+              <div style={{ fontSize: 32, marginBottom: 16, animation: 'spin 2s linear infinite' }}>⟳</div>
+              <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 18, fontWeight: 900, marginBottom: 8 }}>
+                Parsing Bill
+              </div>
+              <div style={{ fontFamily: 'Instrument Sans, sans-serif', fontSize: 13, color: 'var(--muted)' }}>
+                Our AI is analyzing your bill...
+              </div>
+            </div>
+          ) : parsedItems.length > 0 ? (
+            <div>
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 18, fontWeight: 900, marginBottom: 12, color: 'var(--gold)' }}>
+                  ✓ Bill Parsed Successfully
+                </div>
+                <div style={{ fontFamily: 'Instrument Sans, sans-serif', fontSize: 13, color: 'var(--muted)', marginBottom: 16 }}>
+                  {parsedItems.length} items detected • Total: {totalAmount.toFixed(2)}
+                </div>
+
+                <div style={{ maxHeight: 300, overflowY: 'auto', borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)', paddingTop: 12 }}>
+                  {parsedItems.map((item: any, i: number) => (
+                    <div key={i} style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      paddingBottom: 12,
+                      marginBottom: 12,
+                      borderBottom: i < parsedItems.length - 1 ? '1px solid var(--border)' : 'none',
+                    }}>
+                      <div>
+                        <div style={{ fontFamily: 'Instrument Sans, sans-serif', fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>
+                          {item.name}
+                        </div>
+                        <span style={{
+                          display: 'inline-block',
+                          fontFamily: 'DM Mono, monospace',
+                          fontSize: 9,
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.1em',
+                          color: item.category === 'VEG' ? 'var(--green)' : item.category === 'ALCOHOL' ? 'var(--purple)' : 'var(--muted)',
+                          padding: '2px 8px',
+                          border: `1px solid ${item.category === 'VEG' ? 'var(--green)' : item.category === 'ALCOHOL' ? 'var(--purple)' : 'var(--border)'}`,
+                        }}>
+                          {item.category}
+                        </span>
+                      </div>
+                      <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 14, fontWeight: 900, color: 'var(--gold)' }}>
+                        {item.amount.toFixed(2)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {error && (
+                <div style={{ color: 'var(--red)', fontFamily: 'DM Mono, monospace', fontSize: 11, marginBottom: 16, padding: '10px 14px', border: '1px solid var(--red)' }}>
+                  {error}
+                </div>
+              )}
+            </div>
+          ) : success && !parsing ? (
+            <div style={{
+              textAlign: 'center',
+              padding: '40px 20px',
+              color: 'var(--green)',
+            }}>
+              <div style={{ fontSize: 48, marginBottom: 16 }}>✓</div>
+              <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 18, fontWeight: 900, marginBottom: 8 }}>
+                Bill Uploaded!
+              </div>
+              <div style={{ fontFamily: 'Instrument Sans, sans-serif', fontSize: 13, color: 'var(--muted)' }}>
+                We're parsing your bill. This may take a moment.
+              </div>
+            </div>
+          ) : (
+            <>
+              {error && (
+                <div style={{ color: 'var(--red)', fontFamily: 'DM Mono, monospace', fontSize: 11, marginBottom: 16, padding: '10px 14px', border: '1px solid var(--red)' }}>
+                  {error}
+                </div>
+              )}
+
+              <div style={{ marginBottom: 20 }}>
+                <label className="form-label" style={{ display: 'block', marginBottom: 12 }}>
+                  Select Bill Image or PDF
+                </label>
+
+                {preview ? (
+                  <div style={{
+                    position: 'relative',
+                    width: '100%',
+                    height: 200,
+                    border: '2px solid var(--gold)',
+                    borderRadius: 8,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    overflow: 'hidden',
+                    marginBottom: 12,
+                  }}>
+                    {typeof preview === 'string' && preview.startsWith('data:') ? (
+                      <img src={preview} alt="Bill preview" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+                    ) : (
+                      <div style={{ fontSize: 40 }}>{preview}</div>
+                    )}
+                  </div>
+                ) : (
+                  <label style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: '100%',
+                    height: 160,
+                    border: '2px dashed var(--border)',
+                    borderRadius: 8,
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    marginBottom: 12,
+                  }} onDragOver={(e) => {
+                    e.preventDefault();
+                    e.currentTarget.style.borderColor = 'var(--gold)';
+                    e.currentTarget.style.background = 'var(--gold-dim)';
+                  }} onDragLeave={(e) => {
+                    e.currentTarget.style.borderColor = 'var(--border)';
+                    e.currentTarget.style.background = 'transparent';
+                  }}>
+                    <div style={{ fontSize: 32, marginBottom: 8 }}>📸</div>
+                    <div style={{ fontFamily: 'Instrument Sans, sans-serif', fontSize: 13, color: 'var(--text)', marginBottom: 4 }}>
+                      Drag bill here
+                    </div>
+                    <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 10, color: 'var(--muted)' }}>
+                      or click to browse
+                    </div>
+                    <input
+                      type="file"
+                      accept=".jpg,.jpeg,.png,.pdf"
+                      onChange={handleFileChange}
+                      style={{ display: 'none' }}
+                    />
+                  </label>
+                )}
+
+                <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 10, color: 'var(--muted)' }}>
+                  Supported: JPEG, PNG, PDF (Max 10MB)
+                </div>
+              </div>
+
+              {billFile && (
+                <div style={{
+                  padding: '12px',
+                  background: 'var(--surface-alt)',
+                  borderRadius: 6,
+                  marginBottom: 16,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                }}>
+                  <div style={{ fontFamily: 'Instrument Sans, sans-serif', fontSize: 13 }}>
+                    {billFile.name}
+                  </div>
+                  <button
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      color: 'var(--muted)',
+                      fontSize: 16,
+                    }}
+                    onClick={() => {
+                      setBillFile(null);
+                      setPreview('');
+                    }}
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        {!parsing && parsedItems.length > 0 ? (
+          <div className="modal-footer">
+            <button className="btn-ghost" onClick={() => {
+              setBillFile(null);
+              setPreview('');
+              setParsedItems([]);
+              setBillId(null);
+              setSuccess(false);
+            }}>Back</button>
+            <button 
+              className="btn-gold" 
+              onClick={handleSettleBill}
+              disabled={settling}
+            >
+              {settling ? 'Settling...' : 'Settle Bill'}
+            </button>
+          </div>
+        ) : !parsing && !success ? (
+          <div className="modal-footer">
+            <button className="btn-ghost" onClick={onClose}>Cancel</button>
+            <button
+              className="btn-gold"
+              onClick={handleUpload}
+              disabled={!billFile || uploading}
+            >
+              {uploading ? 'Uploading...' : 'Upload'}
+            </button>
+          </div>
+        ) : null}
+
+        <style>{`
+          @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+          }
+        `}</style>
+      </div>
+    </div>
   );
 }
 
@@ -244,6 +848,7 @@ export default function DashboardPage() {
   const [newGroupName, setNewGroupName] = useState('');
   const [newGroupDesc, setNewGroupDesc] = useState('');
   const [newGroupCurrency, setNewGroupCurrency] = useState('INR');
+  const [newGroupInitialPayer, setNewGroupInitialPayer] = useState('');
   const [createLoading, setCreateLoading] = useState(false);
   const [createError, setCreateError] = useState('');
   const [barsLoaded, setBarsLoaded] = useState(false);
@@ -302,10 +907,12 @@ export default function DashboardPage() {
         name: newGroupName.trim(),
         description: newGroupDesc.trim() || undefined,
         currency: newGroupCurrency,
+        initialPayer: newGroupInitialPayer.trim() || undefined,
       });
       setNewGroupName('');
       setNewGroupDesc('');
       setNewGroupCurrency('INR');
+      setNewGroupInitialPayer('');
       setShowCreateModal(false);
       fetchGroups();
     } catch (e: any) {
@@ -596,6 +1203,13 @@ export default function DashboardPage() {
                     <option key={c} value={c} style={{ background: 'var(--bg)' }}>{c}</option>
                   ))}
                 </select>
+              </div>
+              <div className="form-field">
+                <label className="form-label">Who Paid the Bill? (Optional)</label>
+                <input className="form-input" placeholder="e.g., John (your email/ID)" value={newGroupInitialPayer} onChange={e => setNewGroupInitialPayer(e.target.value)} />
+                <p style={{ fontSize: '12px', color: 'var(--muted)', marginTop: '6px' }}>
+                  Enter the email or ID of who paid. Others will owe this person based on their preferences.
+                </p>
               </div>
             </div>
             <div className="modal-footer">

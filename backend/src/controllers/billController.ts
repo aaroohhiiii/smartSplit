@@ -5,6 +5,7 @@ import { PrismaClient } from "@prisma/client";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
+import { parseBillWithGroq, validateBillParsing } from "../services/llmService.ts";
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 const prisma = new PrismaClient({ adapter });
@@ -85,33 +86,43 @@ const allocateItemsByPreferences = (
     return allocatedItems;
 };
 
-// Mock LLM function (replace with actual LLM API call)
-const processBillWithLLM = async (filePath: string): Promise<{
+// Process bill with Groq LLM API
+const processBillWithLLM = async (fileBuffer: Buffer, filePath: string): Promise<{
     items: Array<{name: string, amount: number, category: string}>,
     totalAmount: number,
     taxAmount: number,
 }> => {
-    // Simulate processing delay
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    // Mock response (replace with actual LLM processing)
-    return {
-        items: [
-            { name: "Paneer Butter Masala", amount: 280, category: "veg" },
-            { name: "Chicken Biryani", amount: 320, category: "non_veg" },
-            { name: "Kingfisher Beer", amount: 200, category: "alcohol" },
-        ],
-        totalAmount: 800,
-        taxAmount: 50,
-    };
+    try {
+        const result = await parseBillWithGroq(fileBuffer, filePath);
+        
+        // Validate result
+        const validationErrors = validateBillParsing(result);
+        if (validationErrors.length > 0) {
+            console.warn("Bill parsing validation warnings:", validationErrors);
+        }
+        
+        return result;
+    } catch (error) {
+        console.error("LLM processing error:", error);
+        throw new Error(`Failed to process bill with Groq API: ${error instanceof Error ? error.message : "Unknown error"}`);
+    }
 };
+
+// Export multer instance for use in routes
+export const billUpload = upload;
 
 // POST /groups/:groupId/bills - Upload and process bill
 export const uploadBill = async (req: Request, res: Response) => {
     try {
+        console.log("[BILL] uploadBill handler called");
+        console.log("[BILL] req.params:", req.params);
+        console.log("[BILL] req.file:", req.file ? { filename: req.file.filename, size: req.file.size, path: req.file.path } : "NO FILE");
+        console.log("[BILL] req.auth.userId:", (req as any).auth?.userId);
+
         const { groupId } = req.params;
 
         if (!groupId) {
+            console.log("[BILL] Missing groupId");
             return res.status(400).json({
                 error: {
                     code: "MISSING_GROUP_ID",
@@ -126,6 +137,7 @@ export const uploadBill = async (req: Request, res: Response) => {
         });
 
         if (!group) {
+            console.log("[BILL] Group not found:", groupId);
             return res.status(404).json({
                 error: {
                     code: "GROUP_NOT_FOUND",
@@ -134,66 +146,58 @@ export const uploadBill = async (req: Request, res: Response) => {
             });
         }
 
-        // Use multer middleware
-        upload.single("bill")(req, res, async (err) => {
-            if (err) {
-                return res.status(400).json({
-                    error: {
-                        code: "FILE_UPLOAD_ERROR",
-                        message: err.message,
-                    },
-                });
-            }
+        // File is already processed by multer middleware in route
+        if (!req.file) {
+            console.log("[BILL] No file uploaded");
+            return res.status(400).json({
+                error: {
+                    code: "NO_FILE_UPLOADED",
+                    message: "Please upload a bill image or PDF",
+                },
+            });
+        }
 
-            if (!req.file) {
-                return res.status(400).json({
-                    error: {
-                        code: "NO_FILE_UPLOADED",
-                        message: "Please upload a bill image or PDF",
-                    },
-                });
-            }
-
-            try {
-                // Create bill upload record
-                const billUpload = await prisma.billUpload.create({
-                    data: {
-                        groupId: groupId as string,
-                        fileUrl: req.file.path,
-                        status: "UPLOADED",
-                        uploadedBy: (req as any).userId || "guest",
-                    },
-                });
-
-                // Create AI processing job
-                await prisma.aIProcessingJob.create({
-                    data: {
-                        billUploadId: billUpload.id,
-                        status: "QUEUED",
-                    },
-                });
-
-                // Start async processing
-                processBillAsync(billUpload.id, req.file.path).catch(console.error);
-
-                return res.status(202).json({
-                    billId: billUpload.id,
+        try {
+            console.log("[BILL] Creating bill upload record...");
+            // Create bill upload record
+            const billUpload = await prisma.billUpload.create({
+                data: {
                     groupId: groupId as string,
+                    fileUrl: req.file.path,
                     status: "UPLOADED",
-                    uploadedAt: billUpload.uploadedAt,
-                });
-            } catch (error) {
-                console.error(error);
-                return res.status(500).json({
-                    error: {
-                        code: "INTERNAL_SERVER_ERROR",
-                        message: "An error occurred while processing the upload",
-                    },
-                });
-            }
-        });
+                    uploadedBy: (req as any).auth?.userId || "guest",
+                },
+            });
+
+            // Create AI processing job
+            await prisma.aIProcessingJob.create({
+                data: {
+                    billUploadId: billUpload.id,
+                    status: "QUEUED",
+                },
+            });
+
+            // Start async processing
+            processBillAsync(billUpload.id, req.file.path).catch(console.error);
+
+            console.log("[BILL] Upload successful:", billUpload.id);
+            return res.status(202).json({
+                billId: billUpload.id,
+                groupId: groupId as string,
+                status: "UPLOADED",
+                uploadedAt: billUpload.uploadedAt,
+            });
+        } catch (error) {
+            console.error("[BILL] Error in inner try-catch:", error);
+            return res.status(500).json({
+                error: {
+                    code: "INTERNAL_SERVER_ERROR",
+                    message: error instanceof Error ? error.message : "An error occurred while processing the upload",
+                },
+            });
+        }
     } catch (error) {
-        console.error(error);
+        console.error("[BILL] Error in outer try-catch:", error);
         return res.status(500).json({
             error: {
                 code: "INTERNAL_SERVER_ERROR",
@@ -213,7 +217,8 @@ const processBillAsync = async (billId: string, filePath: string) => {
         });
 
         // Process with LLM
-        const result = await processBillWithLLM(filePath);
+        const fileBuffer = fs.readFileSync(filePath);
+        const result = await processBillWithLLM(fileBuffer, filePath);
 
         // Create ParsedBill record
         await prisma.parsedBill.create({

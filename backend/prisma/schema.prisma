@@ -1,4 +1,3 @@
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -14,6 +13,7 @@ model Group{
   id String @id @default(uuid()) 
   name String 
   description String?
+  initialPayer String?
   createdAt DateTime  @default(now())
   createdBy String 
   currency String 
@@ -29,6 +29,7 @@ model GroupMember{
   group  Group  @relation(fields :[groupId],references:[id])
   groupId  String 
   userId String 
+  name String?
   isVegetarian Boolean
   drinksAlcohol  Boolean 
   role  GroupRole
@@ -93,7 +94,7 @@ paid Decimal @default(0)
 
 
 
-}
+ }
 
 model Settlement{
 id String @id @default(uuid())
@@ -104,7 +105,7 @@ toUserId String
 amount Decimal
 createdAt DateTime @default(now())
 
-}
+ }
 
 
 model BillUpload{
