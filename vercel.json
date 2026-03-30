@@ -1,13 +1,15 @@
 {
-  "buildCommand": "cd backend && npm run build",
-  "outputDirectory": "backend/dist",
+  "buildCommand": "npm install -g tsc && cd backend && npm install",
+  "outputDirectory": "frontend/dist",
+  "functions": {
+    "api/**/*.ts": {
+      "runtime": "nodejs20.x"
+    }
+  },
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "/api/[...route]"
+      "destination": "/api"
     }
-  ],
-  "env": {
-    "NODE_ENV": "production"
-  }
+  ]
 }

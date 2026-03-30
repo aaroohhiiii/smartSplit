@@ -1,8 +1,16 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 
-// Import the compiled backend from dist
-const app = require("../backend/dist/index").default;
+let app: any;
 
-export default function handler(req: VercelRequest, res: VercelResponse) {
-  return app(req, res);
+async function loadApp() {
+  if (!app) {
+    const module = await import("../backend/dist/index.js");
+    app = module.default;
+  }
+  return app;
+}
+
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  const expressApp = await loadApp();
+  return expressApp(req, res);
 }
