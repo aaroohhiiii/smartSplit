@@ -1,3 +1,7 @@
+export const config = {
+  runtime: "nodejs18.x",
+};
+
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 
 let app: any;
@@ -9,7 +13,6 @@ async function loadApp() {
   }
   return app;
 }
-// ...existing code...
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const expressApp = await loadApp();
