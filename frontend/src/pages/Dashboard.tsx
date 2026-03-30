@@ -3,7 +3,7 @@ import { useAuth } from '@clerk/clerk-react';
 import { useNavigate } from 'react-router-dom';
 import { groupService, type Group } from '../services/groupService';
 
-// ─── Add Member Modal ────────────────────────────────────────────────────────
+
 function AddMemberModal({
   groupId,
   token,
@@ -93,7 +93,7 @@ function AddMemberModal({
   );
 }
 
-// ─── Group Detail Drawer ─────────────────────────────────────────────────────
+
 function GroupDetailDrawer({
   group,
   token,
@@ -362,7 +362,7 @@ function GroupDetailDrawer({
   );
 }
 
-// ─── Bill Upload Modal ──────────────────────────────────────────────────────
+
 function BillUploadModal({
   groupId,
   group,
@@ -415,13 +415,12 @@ function BillUploadModal({
     }
   };
 
-  // Poll for bill parsing results
+  
   const pollBillStatus = async (bId: string) => {
     setParsing(true);
     setError('');
     let attempts = 0;
-    const maxAttempts = 60; // 5 minutes with 5-second intervals
-
+    const maxAttempts = 60; 
     const poll = async () => {
       try {
         const response = await fetch(
@@ -453,10 +452,10 @@ function BillUploadModal({
           return;
         }
 
-        // Still processing, retry
+       
         attempts++;
         if (attempts < maxAttempts) {
-          setTimeout(poll, 5000); // Poll every 5 seconds
+          setTimeout(poll, 5000);
         } else {
           setError('Bill parsing took too long. Please try again.');
           setParsing(false);
@@ -485,10 +484,10 @@ function BillUploadModal({
     try {
       console.log('[SETTLE] Creating expense from parsed bill...');
 
-      // Get members from group
+      
       const members = group.members || [];
 
-      // Smart split based on preferences
+
       const expenseItems = parsedItems.map((item: any) => {
         let sharedBy: string[] = [];
 
@@ -555,7 +554,7 @@ function BillUploadModal({
       // Wait a moment for the backend to process the expense
       await new Promise(resolve => setTimeout(resolve, 800));
 
-      // Redirect to settlement page using React Router
+      
       navigate(`/group/${groupId}/settlement`);
     } catch (e: any) {
       console.error('[SETTLE] Error:', e);
@@ -840,7 +839,6 @@ function BillUploadModal({
   );
 }
 
-// ─── Main Dashboard ──────────────────────────────────────────────────────────
 export default function DashboardPage() {
   const { userId, getToken, isLoaded } = useAuth();
   const [token, setToken] = useState<string | null>(null);
