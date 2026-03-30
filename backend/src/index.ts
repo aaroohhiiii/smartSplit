@@ -48,11 +48,11 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 // ─── Export app for Vercel Functions ─────────────────────────────────────
 export default app;
 
-// ─── Start server (local development only) ───────────────────────────────
-if (process.env.NODE_ENV !== "production") {
-    app.listen(PORT, () => {
-        console.log(`✓ Server running on http://localhost:${PORT}`);
-        console.log(`✓ CORS enabled for ${process.env.FRONTEND_URL || "http://localhost:5173"}`);
-    });
-}
+// // ─── Start server (local development only) ───────────────────────────────
+// if (process.env.NODE_ENV !== "production") {
+//     app.listen(PORT, () => {
+//         console.log(`✓ Server running on http://localhost:${PORT}`);
+//         console.log(`✓ CORS enabled for ${process.env.FRONTEND_URL || "http://localhost:5173"}`);
+//     });
+// }
 
