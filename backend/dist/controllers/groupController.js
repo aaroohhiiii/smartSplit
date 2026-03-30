@@ -1,4 +1,3 @@
-import { type Request, type Response } from "express";
 import "dotenv/config";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
@@ -6,10 +5,8 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import { parseBillWithGroq } from "../services/llmService";
-
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 const prisma = new PrismaClient({ adapter });
-
 // Configure multer for bill uploads
 const billStorage = multer.diskStorage({
     destination: (req, file, cb) => {
@@ -24,7 +21,6 @@ const billStorage = multer.diskStorage({
         cb(null, uniqueName);
     },
 });
-
 const billUpload = multer({
     storage: billStorage,
     limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
@@ -32,28 +28,25 @@ const billUpload = multer({
         const allowedTypes = /jpeg|jpg|png|pdf/;
         const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
         const mimetype = allowedTypes.test(file.mimetype);
-
         if (mimetype && extname) {
             return cb(null, true);
-        } else {
+        }
+        else {
             cb(new Error("Only JPEG, PNG, and PDF files are allowed"));
         }
     },
 });
-
 // Helper function to process bill asynchronously
-const processBillForGroupAsync = async (groupId: string, billUploadId: string, filePath: string) => {
+const processBillForGroupAsync = async (groupId, billUploadId, filePath) => {
     try {
         // Update AI job status to RUNNING
         await prisma.aIProcessingJob.update({
             where: { billUploadId },
             data: { status: "RUNNING" },
         });
-
         // Process with Groq LLM
         const fileBuffer = fs.readFileSync(filePath);
         const result = await parseBillWithGroq(fileBuffer, filePath);
-
         // Create ParsedBill record
         await prisma.parsedBill.create({
             data: {
@@ -63,13 +56,11 @@ const processBillForGroupAsync = async (groupId: string, billUploadId: string, f
                 completedAt: new Date(),
             },
         });
-
         // Update bill status to COMPLETED
         await prisma.billUpload.update({
             where: { id: billUploadId },
             data: { status: "COMPLETED" },
         });
-
         // Update AI job to COMPLETED
         await prisma.aIProcessingJob.update({
             where: { billUploadId },
@@ -78,17 +69,15 @@ const processBillForGroupAsync = async (groupId: string, billUploadId: string, f
                 finishedAt: new Date(),
             },
         });
-
         console.log(`[Group Bill Processing] Successfully processed bill ${billUploadId} for group ${groupId}`);
-    } catch (error) {
+    }
+    catch (error) {
         console.error("[Group Bill Processing Error]", error);
-
         // Update bill status to FAILED
         await prisma.billUpload.update({
             where: { id: billUploadId },
             data: { status: "FAILED" },
         });
-
         // Update AI job to FAILED
         await prisma.aIProcessingJob.update({
             where: { billUploadId },
@@ -100,13 +89,11 @@ const processBillForGroupAsync = async (groupId: string, billUploadId: string, f
         });
     }
 };
-
-export const createGroup = async (req: Request, res: Response) => {
+export const createGroup = async (req, res) => {
     try {
         const { name, description, currency, initialPayer } = req.body;
         const createdBy = req.auth?.userId;
-        const file = (req as any).file;
-
+        const file = req.file;
         if (!name || !currency || !createdBy) {
             return res.status(400).json({
                 error: {
@@ -123,7 +110,6 @@ export const createGroup = async (req: Request, res: Response) => {
                 },
             });
         }
-
         const group = await prisma.group.create({
             data: {
                 name,
@@ -133,7 +119,6 @@ export const createGroup = async (req: Request, res: Response) => {
                 ...(initialPayer && { initialPayer }),
             },
         });
-
         // Add creator as OWNER member
         await prisma.groupMember.create({
             data: {
@@ -144,7 +129,6 @@ export const createGroup = async (req: Request, res: Response) => {
                 drinksAlcohol: false,
             },
         });
-
         // Handle optional bill upload
         let billData = null;
         if (file) {
@@ -157,7 +141,6 @@ export const createGroup = async (req: Request, res: Response) => {
                         uploadedBy: createdBy,
                     },
                 });
-
                 // Create AI processing job
                 await prisma.aIProcessingJob.create({
                     data: {
@@ -165,32 +148,30 @@ export const createGroup = async (req: Request, res: Response) => {
                         status: "QUEUED",
                     },
                 });
-
                 // Start async processing
                 processBillForGroupAsync(group.id, billUploadRecord.id, file.path).catch(console.error);
-
                 billData = {
                     billId: billUploadRecord.id,
                     status: "QUEUED",
                     uploadedAt: billUploadRecord.uploadedAt,
                 };
-            } catch (billError) {
+            }
+            catch (billError) {
                 console.error("[Group Bill Upload Error]", billError);
                 // Don't fail group creation if bill upload fails, just log it
                 console.warn(`Bill upload failed for group ${group.id}, but group was created successfully`);
             }
         }
-
         const groupWithMembers = await prisma.group.findUnique({
             where: { id: group.id },
             include: { members: true },
         });
-
         res.status(201).json({
             ...groupWithMembers,
             bill: billData, // Include bill info if uploaded
         });
-    } catch (error) {
+    }
+    catch (error) {
         console.error("[createGroup error]", error);
         res.status(500).json({
             error: {
@@ -200,8 +181,7 @@ export const createGroup = async (req: Request, res: Response) => {
         });
     }
 };
-
-export const createGroupWithBill = async (req: Request, res: Response) => {
+export const createGroupWithBill = async (req, res) => {
     billUpload.single("bill")(req, res, async (err) => {
         if (err) {
             return res.status(400).json({
@@ -214,12 +194,10 @@ export const createGroupWithBill = async (req: Request, res: Response) => {
         await createGroup(req, res);
     });
 };
-
-export const listGroups = async (req: Request, res: Response) => {
+export const listGroups = async (req, res) => {
     try {
         // Use query param ONLY — no Clerk auth check
-        const userId = req.query.userId as string;
-
+        const userId = req.query.userId;
         if (!userId) {
             return res.status(400).json({
                 error: {
@@ -228,9 +206,7 @@ export const listGroups = async (req: Request, res: Response) => {
                 },
             });
         }
-
         console.log(`[listGroups] Fetching groups for userId: ${userId}`);
-
         const groups = await prisma.group.findMany({
             where: {
                 members: {
@@ -243,15 +219,14 @@ export const listGroups = async (req: Request, res: Response) => {
                 members: true,
             },
         });
-
         const groupsWithCount = groups.map((g) => ({
             ...g,
             memberCount: g.members.length,
         }));
-
         console.log(`[listGroups] Found ${groupsWithCount.length} groups`);
         res.status(200).json(groupsWithCount);
-    } catch (error) {
+    }
+    catch (error) {
         console.error("[listGroups error]", error);
         res.status(500).json({
             error: {
@@ -261,11 +236,9 @@ export const listGroups = async (req: Request, res: Response) => {
         });
     }
 };
-
-export const getGroupDetails = async (req: Request, res: Response) => {
+export const getGroupDetails = async (req, res) => {
     try {
         const { groupId } = req.params;
-
         if (!groupId) {
             return res.status(400).json({
                 error: {
@@ -274,16 +247,14 @@ export const getGroupDetails = async (req: Request, res: Response) => {
                 },
             });
         }
-
         const group = await prisma.group.findUnique({
             where: {
-                id: groupId as string,
+                id: groupId,
             },
             include: {
                 members: true,
             },
         });
-
         if (!group) {
             return res.status(404).json({
                 error: {
@@ -292,9 +263,9 @@ export const getGroupDetails = async (req: Request, res: Response) => {
                 },
             });
         }
-
         res.status(200).json(group);
-    } catch (error) {
+    }
+    catch (error) {
         console.error("[getGroupDetails error]", error);
         res.status(500).json({
             error: {
@@ -304,14 +275,11 @@ export const getGroupDetails = async (req: Request, res: Response) => {
         });
     }
 };
-
-export const addGroupMember = async (req: Request, res: Response) => {
+export const addGroupMember = async (req, res) => {
     try {
         const { groupId } = req.params;
         const { userId, preferences } = req.body;
-
         console.log(`[addGroupMember] groupId=${groupId}, userId=${userId}, preferences=`, preferences);
-
         if (!userId || !groupId) {
             return res.status(400).json({
                 error: {
@@ -320,7 +288,6 @@ export const addGroupMember = async (req: Request, res: Response) => {
                 },
             });
         }
-
         if (!preferences || typeof preferences.isVegetarian !== "boolean" || typeof preferences.drinksAlcohol !== "boolean") {
             return res.status(400).json({
                 error: {
@@ -329,20 +296,17 @@ export const addGroupMember = async (req: Request, res: Response) => {
                 },
             });
         }
-
         // Check if group exists
-        const group = await prisma.group.findUnique({ where: { id: groupId as string } });
+        const group = await prisma.group.findUnique({ where: { id: groupId } });
         if (!group) {
             return res.status(404).json({
                 error: { code: "GROUP_NOT_FOUND", message: "Group does not exist" },
             });
         }
-
         // Check if user already a member
         const existingMember = await prisma.groupMember.findFirst({
-            where: { groupId: groupId as string, userId },
+            where: { groupId: groupId, userId },
         });
-
         if (existingMember) {
             return res.status(409).json({
                 error: {
@@ -351,20 +315,19 @@ export const addGroupMember = async (req: Request, res: Response) => {
                 },
             });
         }
-
         const member = await prisma.groupMember.create({
             data: {
-                groupId: groupId as string,
+                groupId: groupId,
                 userId,
                 isVegetarian: preferences.isVegetarian,
                 drinksAlcohol: preferences.drinksAlcohol,
                 role: "MEMBER",
             },
         });
-
         console.log(`[addGroupMember] Success: ${member.id}`);
         res.status(201).json(member);
-    } catch (error) {
+    }
+    catch (error) {
         console.error("[addGroupMember error]", error);
         res.status(500).json({
             error: {
@@ -374,12 +337,10 @@ export const addGroupMember = async (req: Request, res: Response) => {
         });
     }
 };
-
-export const updateMemberPreferences = async (req: Request, res: Response) => {
+export const updateMemberPreferences = async (req, res) => {
     try {
         const { groupId, memberId } = req.params;
         const { preferences } = req.body;
-
         if (!groupId || !memberId) {
             return res.status(400).json({
                 error: {
@@ -388,7 +349,6 @@ export const updateMemberPreferences = async (req: Request, res: Response) => {
                 },
             });
         }
-
         if (!preferences || typeof preferences.isVegetarian !== "boolean" || typeof preferences.drinksAlcohol !== "boolean") {
             return res.status(400).json({
                 error: {
@@ -397,13 +357,11 @@ export const updateMemberPreferences = async (req: Request, res: Response) => {
                 },
             });
         }
-
         const member = await prisma.groupMember.findUnique({
             where: {
-                id: memberId as string,
+                id: memberId,
             },
         });
-
         if (!member || member.groupId !== groupId) {
             return res.status(404).json({
                 error: {
@@ -412,19 +370,18 @@ export const updateMemberPreferences = async (req: Request, res: Response) => {
                 },
             });
         }
-
         const updatedMember = await prisma.groupMember.update({
             where: {
-                id: memberId as string,
+                id: memberId,
             },
             data: {
                 isVegetarian: preferences.isVegetarian,
                 drinksAlcohol: preferences.drinksAlcohol,
             },
         });
-
         res.status(200).json(updatedMember);
-    } catch (error) {
+    }
+    catch (error) {
         console.error("[updateMemberPreferences error]", error);
         res.status(500).json({
             error: {
@@ -434,11 +391,9 @@ export const updateMemberPreferences = async (req: Request, res: Response) => {
         });
     }
 };
-
-export const removeGroupMember = async (req: Request, res: Response) => {
+export const removeGroupMember = async (req, res) => {
     try {
         const { groupId, memberId } = req.params;
-
         if (!groupId || !memberId) {
             return res.status(400).json({
                 error: {
@@ -447,13 +402,11 @@ export const removeGroupMember = async (req: Request, res: Response) => {
                 },
             });
         }
-
         const member = await prisma.groupMember.findUnique({
             where: {
-                id: memberId as string,
+                id: memberId,
             },
         });
-
         if (!member || member.groupId !== groupId) {
             return res.status(404).json({
                 error: {
@@ -462,11 +415,10 @@ export const removeGroupMember = async (req: Request, res: Response) => {
                 },
             });
         }
-
         if (member.role === "OWNER") {
             const ownerCount = await prisma.groupMember.count({
                 where: {
-                    groupId: groupId as string,
+                    groupId: groupId,
                     role: "OWNER",
                 },
             });
@@ -479,16 +431,15 @@ export const removeGroupMember = async (req: Request, res: Response) => {
                 });
             }
         }
-
         await prisma.groupMember.delete({
             where: {
-                id: memberId as string,
+                id: memberId,
             },
         });
-
         console.log(`[removeGroupMember] Deleted member ${memberId}`);
         res.status(204).send();
-    } catch (error) {
+    }
+    catch (error) {
         console.error("[removeGroupMember error]", error);
         res.status(500).json({
             error: {
@@ -498,3 +449,4 @@ export const removeGroupMember = async (req: Request, res: Response) => {
         });
     }
 };
+//# sourceMappingURL=groupController.js.map

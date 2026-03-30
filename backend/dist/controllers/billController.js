@@ -1,4 +1,3 @@
-import { type Request, type Response } from "express";
 import "dotenv/config";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
@@ -6,10 +5,8 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import { parseBillWithGroq, validateBillParsing } from "../services/llmService";
-
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 const prisma = new PrismaClient({ adapter });
-
 // Configure multer for file uploads
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
@@ -24,7 +21,6 @@ const storage = multer.diskStorage({
         cb(null, uniqueName);
     },
 });
-
 const upload = multer({
     storage,
     limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
@@ -32,23 +28,18 @@ const upload = multer({
         const allowedTypes = /jpeg|jpg|png|pdf/;
         const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
         const mimetype = allowedTypes.test(file.mimetype);
-
         if (mimetype && extname) {
             return cb(null, true);
-        } else {
+        }
+        else {
             cb(new Error("Only JPEG, PNG, and PDF files are allowed"));
         }
     },
 });
-
 // Helper: Smart allocation based on member preferences
-const allocateItemsByPreferences = (
-    items: Array<{name: string, amount: number, category: string}>,
-    members: Array<{userId: string, isVegetarian: boolean, drinksAlcohol: boolean}>
-) => {
+const allocateItemsByPreferences = (items, members) => {
     const allocatedItems = items.map(item => {
         let eligibleMembers = members;
-
         // Filter based on category and preferences
         switch (item.category.toLowerCase()) {
             case 'veg':
@@ -69,12 +60,10 @@ const allocateItemsByPreferences = (
                 eligibleMembers = members;
                 break;
         }
-
         // If no eligible members, default to all (fallback)
         if (eligibleMembers.length === 0) {
             eligibleMembers = members;
         }
-
         return {
             name: item.name,
             amount: item.amount,
@@ -82,45 +71,34 @@ const allocateItemsByPreferences = (
             sharedBy: eligibleMembers.map(m => m.userId),
         };
     });
-
     return allocatedItems;
 };
-
 // Process bill with Groq LLM API
-const processBillWithLLM = async (fileBuffer: Buffer, filePath: string): Promise<{
-    items: Array<{name: string, amount: number, category: string}>,
-    totalAmount: number,
-    taxAmount: number,
-}> => {
+const processBillWithLLM = async (fileBuffer, filePath) => {
     try {
         const result = await parseBillWithGroq(fileBuffer, filePath);
-        
         // Validate result
         const validationErrors = validateBillParsing(result);
         if (validationErrors.length > 0) {
             console.warn("Bill parsing validation warnings:", validationErrors);
         }
-        
         return result;
-    } catch (error) {
+    }
+    catch (error) {
         console.error("LLM processing error:", error);
         throw new Error(`Failed to process bill with Groq API: ${error instanceof Error ? error.message : "Unknown error"}`);
     }
 };
-
 // Export multer instance for use in routes
 export const billUpload = upload;
-
 // POST /groups/:groupId/bills - Upload and process bill
-export const uploadBill = async (req: Request, res: Response) => {
+export const uploadBill = async (req, res) => {
     try {
         console.log("[BILL] uploadBill handler called");
         console.log("[BILL] req.params:", req.params);
         console.log("[BILL] req.file:", req.file ? { filename: req.file.filename, size: req.file.size, path: req.file.path } : "NO FILE");
-        console.log("[BILL] req.auth.userId:", (req as any).auth?.userId);
-
+        console.log("[BILL] req.auth.userId:", req.auth?.userId);
         const { groupId } = req.params;
-
         if (!groupId) {
             console.log("[BILL] Missing groupId");
             return res.status(400).json({
@@ -130,12 +108,10 @@ export const uploadBill = async (req: Request, res: Response) => {
                 },
             });
         }
-
         // Verify group exists
         const group = await prisma.group.findUnique({
-            where: { id: groupId as string },
+            where: { id: groupId },
         });
-
         if (!group) {
             console.log("[BILL] Group not found:", groupId);
             return res.status(404).json({
@@ -145,7 +121,6 @@ export const uploadBill = async (req: Request, res: Response) => {
                 },
             });
         }
-
         // File is already processed by multer middleware in route
         if (!req.file) {
             console.log("[BILL] No file uploaded");
@@ -156,19 +131,17 @@ export const uploadBill = async (req: Request, res: Response) => {
                 },
             });
         }
-
         try {
             console.log("[BILL] Creating bill upload record...");
             // Create bill upload record
             const billUpload = await prisma.billUpload.create({
                 data: {
-                    groupId: groupId as string,
+                    groupId: groupId,
                     fileUrl: req.file.path,
                     status: "UPLOADED",
-                    uploadedBy: (req as any).auth?.userId || "guest",
+                    uploadedBy: req.auth?.userId || "guest",
                 },
             });
-
             // Create AI processing job
             await prisma.aIProcessingJob.create({
                 data: {
@@ -176,18 +149,17 @@ export const uploadBill = async (req: Request, res: Response) => {
                     status: "QUEUED",
                 },
             });
-
             // Start async processing
             processBillAsync(billUpload.id, req.file.path).catch(console.error);
-
             console.log("[BILL] Upload successful:", billUpload.id);
             return res.status(202).json({
                 billId: billUpload.id,
-                groupId: groupId as string,
+                groupId: groupId,
                 status: "UPLOADED",
                 uploadedAt: billUpload.uploadedAt,
             });
-        } catch (error) {
+        }
+        catch (error) {
             console.error("[BILL] Error in inner try-catch:", error);
             return res.status(500).json({
                 error: {
@@ -196,7 +168,8 @@ export const uploadBill = async (req: Request, res: Response) => {
                 },
             });
         }
-    } catch (error) {
+    }
+    catch (error) {
         console.error("[BILL] Error in outer try-catch:", error);
         return res.status(500).json({
             error: {
@@ -206,20 +179,17 @@ export const uploadBill = async (req: Request, res: Response) => {
         });
     }
 };
-
 // Async processing function
-const processBillAsync = async (billId: string, filePath: string) => {
+const processBillAsync = async (billId, filePath) => {
     try {
         // Update AI job status to RUNNING
         await prisma.aIProcessingJob.update({
             where: { billUploadId: billId },
             data: { status: "RUNNING" },
         });
-
         // Process with LLM
         const fileBuffer = fs.readFileSync(filePath);
         const result = await processBillWithLLM(fileBuffer, filePath);
-
         // Create ParsedBill record
         await prisma.parsedBill.create({
             data: {
@@ -229,13 +199,11 @@ const processBillAsync = async (billId: string, filePath: string) => {
                 completedAt: new Date(),
             },
         });
-
         // Update bill status to COMPLETED
         await prisma.billUpload.update({
             where: { id: billId },
             data: { status: "COMPLETED" },
         });
-
         // Update AI job to COMPLETED
         await prisma.aIProcessingJob.update({
             where: { billUploadId: billId },
@@ -244,15 +212,14 @@ const processBillAsync = async (billId: string, filePath: string) => {
                 finishedAt: new Date(),
             },
         });
-    } catch (error) {
+    }
+    catch (error) {
         console.error("Bill processing error:", error);
-
         // Update bill status to FAILED
         await prisma.billUpload.update({
             where: { id: billId },
             data: { status: "FAILED" },
         });
-
         // Update AI job to FAILED
         await prisma.aIProcessingJob.update({
             where: { billUploadId: billId },
@@ -264,12 +231,10 @@ const processBillAsync = async (billId: string, filePath: string) => {
         });
     }
 };
-
 // GET /bills/:billId - Get bill processing status
-export const getBillStatus = async (req: Request, res: Response) => {
+export const getBillStatus = async (req, res) => {
     try {
         const { billId } = req.params;
-
         if (!billId) {
             return res.status(400).json({
                 error: {
@@ -278,15 +243,13 @@ export const getBillStatus = async (req: Request, res: Response) => {
                 },
             });
         }
-
         const billUpload = await prisma.billUpload.findUnique({
-            where: { id: billId as string },
+            where: { id: billId },
             include: {
                 parsedBill: true,
                 aiJob: true,
             },
         });
-
         if (!billUpload) {
             return res.status(404).json({
                 error: {
@@ -295,33 +258,29 @@ export const getBillStatus = async (req: Request, res: Response) => {
                 },
             });
         }
-
-        const response: any = {
+        const response = {
             billId: billUpload.id,
             groupId: billUpload.groupId,
             status: billUpload.status,
             uploadedAt: billUpload.uploadedAt,
         };
-
         if (billUpload.status === "COMPLETED" && billUpload.parsedBill) {
             response.parsedItems = billUpload.parsedBill.items;
             response.totalDetectedAmount = Number(billUpload.parsedBill.totalAmount);
             response.completedAt = billUpload.parsedBill.completedAt;
         }
-
         if (billUpload.status === "PROCESSING" && billUpload.aiJob) {
             response.progress = 50; // Mock progress
         }
-
         if (billUpload.status === "FAILED" && billUpload.aiJob) {
             response.error = {
                 code: "PROCESSING_FAILED",
                 message: billUpload.aiJob.error || "Processing failed",
             };
         }
-
         return res.status(200).json(response);
-    } catch (error) {
+    }
+    catch (error) {
         console.error(error);
         return res.status(500).json({
             error: {
@@ -331,13 +290,11 @@ export const getBillStatus = async (req: Request, res: Response) => {
         });
     }
 };
-
 // POST /bills/:billId/confirm - Confirm and create smart expense
-export const confirmBillItems = async (req: Request, res: Response) => {
+export const confirmBillItems = async (req, res) => {
     try {
         const { billId } = req.params;
         const { paidBy, expenseTitle, adjustedItems } = req.body;
-
         if (!billId) {
             return res.status(400).json({
                 error: {
@@ -346,7 +303,6 @@ export const confirmBillItems = async (req: Request, res: Response) => {
                 },
             });
         }
-
         if (!paidBy || !expenseTitle) {
             return res.status(400).json({
                 error: {
@@ -355,12 +311,10 @@ export const confirmBillItems = async (req: Request, res: Response) => {
                 },
             });
         }
-
         const billUpload = await prisma.billUpload.findUnique({
-            where: { id: billId as string },
+            where: { id: billId },
             include: { parsedBill: true },
         });
-
         if (!billUpload || billUpload.status !== "COMPLETED" || !billUpload.parsedBill) {
             return res.status(400).json({
                 error: {
@@ -369,7 +323,6 @@ export const confirmBillItems = async (req: Request, res: Response) => {
                 },
             });
         }
-
         // Get group members with preferences
         const members = await prisma.groupMember.findMany({
             where: { groupId: billUpload.groupId },
@@ -379,7 +332,6 @@ export const confirmBillItems = async (req: Request, res: Response) => {
                 drinksAlcohol: true,
             },
         });
-
         if (members.length === 0) {
             return res.status(400).json({
                 error: {
@@ -388,7 +340,6 @@ export const confirmBillItems = async (req: Request, res: Response) => {
                 },
             });
         }
-
         // Verify paidBy is a group member
         const paidByMember = members.find(m => m.userId === paidBy);
         if (!paidByMember) {
@@ -399,39 +350,34 @@ export const confirmBillItems = async (req: Request, res: Response) => {
                 },
             });
         }
-
         // Get group details
         const group = await prisma.group.findUnique({
             where: { id: billUpload.groupId },
         });
-
         // Use adjusted items if provided, otherwise use parsed items
-        const items = adjustedItems || (billUpload.parsedBill.items as any[]);
-
+        const items = adjustedItems || billUpload.parsedBill.items;
         // Apply smart allocation based on preferences
         const smartAllocatedItems = allocateItemsByPreferences(items, members);
-
         // Calculate total
-        const itemsTotal = items.reduce((sum: number, item: any) => sum + parseFloat(item.amount), 0);
+        const itemsTotal = items.reduce((sum, item) => sum + parseFloat(item.amount), 0);
         const taxAmount = Number(billUpload.parsedBill.totalAmount || 0) - itemsTotal;
         const totalAmount = itemsTotal + taxAmount;
-
         // Create expense with smart allocation
         const expense = await prisma.expense.create({
             data: {
                 groupId: billUpload.groupId,
-                title: expenseTitle as string,
-                paidBy: paidBy as string,
-                currency: group!.currency,
-                createdBy: paidBy as string,
+                title: expenseTitle,
+                paidBy: paidBy,
+                currency: group.currency,
+                createdBy: paidBy,
                 taxAmount: Math.max(0, taxAmount),
                 items: {
-                    create: smartAllocatedItems.map((item: any) => ({
+                    create: smartAllocatedItems.map((item) => ({
                         name: item.name,
                         amount: parseFloat(item.amount),
                         category: item.category,
                         participants: {
-                            create: item.sharedBy.map((userId: string) => ({ userId })),
+                            create: item.sharedBy.map((userId) => ({ userId })),
                         },
                     })),
                 },
@@ -444,16 +390,13 @@ export const confirmBillItems = async (req: Request, res: Response) => {
                 },
             },
         });
-
         // Update bill upload with expenseId (store as JSON or create relationship)
         await prisma.billUpload.update({
-            where: { id: billId as string },
+            where: { id: billId },
             data: { status: "COMPLETED" }, // Mark as fully processed
         });
-
         // Calculate split summary
         const splitSummary = await calculateSplitSummary(expense.id);
-
         return res.status(201).json({
             billId: billUpload.id,
             expenseId: expense.id,
@@ -474,7 +417,7 @@ export const confirmBillItems = async (req: Request, res: Response) => {
             },
             smartAllocation: {
                 message: "Items automatically allocated based on member preferences",
-                allocationDetails: smartAllocatedItems.map((item: any) => ({
+                allocationDetails: smartAllocatedItems.map((item) => ({
                     item: item.name,
                     category: item.category,
                     allocatedTo: item.sharedBy,
@@ -482,7 +425,8 @@ export const confirmBillItems = async (req: Request, res: Response) => {
                 })),
             },
         });
-    } catch (error) {
+    }
+    catch (error) {
         console.error(error);
         return res.status(500).json({
             error: {
@@ -492,12 +436,8 @@ export const confirmBillItems = async (req: Request, res: Response) => {
         });
     }
 };
-
 // Helper: Get allocation reason for transparency
-const getAllocationReason = (
-    category: string,
-    members: Array<{userId: string, isVegetarian: boolean, drinksAlcohol: boolean}>
-) => {
+const getAllocationReason = (category, members) => {
     switch (category.toLowerCase()) {
         case 'veg':
             return "All members can share vegetarian items";
@@ -511,9 +451,8 @@ const getAllocationReason = (
             return "Split equally among all members";
     }
 };
-
 // Helper function (import from expense controller or create shared utility)
-const calculateSplitSummary = async (expenseId: string) => {
+const calculateSplitSummary = async (expenseId) => {
     const expense = await prisma.expense.findUnique({
         where: { id: expenseId },
         include: {
@@ -524,37 +463,30 @@ const calculateSplitSummary = async (expenseId: string) => {
             },
         },
     });
-
-    if (!expense) return null;
-
-    const splitMap: { [userId: string]: { owes: number; paid: number } } = {};
-
+    if (!expense)
+        return null;
+    const splitMap = {};
     // Initialize paidBy in map
     splitMap[expense.paidBy] = { owes: 0, paid: Number(expense.taxAmount) };
-
     // Distribute item amounts
     for (const item of expense.items) {
         const itemAmount = Number(item.amount);
-        
         // Ensure paidBy is in the map and add item amount to their paid
         if (!splitMap[expense.paidBy]) {
             splitMap[expense.paidBy] = { owes: 0, paid: 0 };
         }
-        (splitMap[expense.paidBy]!.paid) += itemAmount;
-
+        (splitMap[expense.paidBy].paid) += itemAmount;
         // Split item among participants
         if (item.participants.length > 0) {
             const perPersonAmount = itemAmount / item.participants.length;
-
             for (const participant of item.participants) {
                 if (!splitMap[participant.userId]) {
                     splitMap[participant.userId] = { owes: 0, paid: 0 };
                 }
-                splitMap[participant.userId]!.owes = (splitMap[participant.userId]!.owes || 0) + perPersonAmount;
+                splitMap[participant.userId].owes = (splitMap[participant.userId].owes || 0) + perPersonAmount;
             }
         }
     }
-
     return Object.entries(splitMap).map(([userId, { owes, paid }]) => ({
         userId,
         owes: Math.round(owes * 100) / 100,
@@ -562,5 +494,5 @@ const calculateSplitSummary = async (expenseId: string) => {
         netBalance: Math.round((paid - owes) * 100) / 100,
     }));
 };
-
 export { upload };
+//# sourceMappingURL=billController.js.map

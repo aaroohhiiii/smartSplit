@@ -106,12 +106,19 @@ Important:
     console.log("[GROQ] Response status:", response.status);
 
     if (!response.ok) {
-      const error = await response.json();
+      const error = await response.json() as unknown;
       console.error("[GROQ] API error response:", error);
-      throw new Error(`Groq API error: ${error.error?.message || "Unknown error"}`);
+      const errorMessage = typeof error === 'object' && error !== null && 'error' in error && typeof (error as any).error?.message === 'string' ? (error as any).error.message : "Unknown error";
+      throw new Error(`Groq API error: ${errorMessage}`);
     }
 
-    const data: GroqResponse = await response.json();
+    let data: GroqResponse;
+    try {
+      data = await response.json() as GroqResponse;
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      throw new Error(`Failed to parse Groq API response: ${err.message || "Unknown error"}`);
+    }
     console.log("[GROQ] API response received");
     
     const content = data.choices[0]?.message?.content;
@@ -154,8 +161,8 @@ Important:
       taxAmount,
     };
   } catch (error) {
-    console.error("[GROQ] Error parsing bill with Groq:", error);
-    throw error;
+    const err = error instanceof Error ? error : new Error(String(error));
+    throw new Error(`Groq API error: ${err.message || "Unknown error"}`);
   }
 };
 

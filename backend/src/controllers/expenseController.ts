@@ -62,13 +62,12 @@ const calculateSplitSummary = async (expenseId: string) => {
 
 export const createExpense = async (req: Request, res: Response) => {
   try {
-    const { groupId } = req.params; // Extract from URL params
+    const { groupId } = req.params;
+    const groupIdStr = Array.isArray(groupId) ? groupId[0] : groupId;
     const { title, paidBy, items, taxAmount = 0 } = req.body;
-    // Use authenticated user ID, fallback to paidBy if not available
     const createdBy = req.auth?.userId || paidBy;
 
-    // Basic validations
-    if (!groupId || !title || !paidBy || !items || items.length === 0) {
+    if (!groupIdStr || !title || !paidBy || !items || items.length === 0) {
       return res.status(400).json({
         error: { code: "MISSING_FIELDS", message: "groupId (in URL), title, paidBy, and items (non-empty array) are required" },
       });
@@ -80,12 +79,12 @@ export const createExpense = async (req: Request, res: Response) => {
       });
     }
 
-    const group = await prisma.group.findUnique({ where: { id: groupId } });
+    const group = await prisma.group.findUnique({ where: { id: groupIdStr } });
     if (!group) {
       return res.status(404).json({ error: { code: "GROUP_NOT_FOUND", message: "Group does not exist" } });
     }
 
-    const paidByMember = await prisma.groupMember.findFirst({ where: { groupId, userId: paidBy } });
+    const paidByMember = await prisma.groupMember.findFirst({ where: { groupId: groupIdStr, userId: paidBy } });
     if (!paidByMember) {
       return res.status(400).json({ error: { code: "INVALID_PAYER", message: "paidBy user must be a group member" } });
     }
@@ -102,7 +101,7 @@ export const createExpense = async (req: Request, res: Response) => {
    
     const allParticipantIds = items.flatMap((item: any) => item.sharedBy);
     const members = await prisma.groupMember.findMany({
-      where: { groupId, userId: { in: allParticipantIds } },
+      where: { groupId: groupIdStr, userId: { in: allParticipantIds } },
     });
     const memberIdsSet = new Set(members.map(m => m.userId));
 
@@ -123,7 +122,7 @@ export const createExpense = async (req: Request, res: Response) => {
     // Create expense with nested items
     const expense = await prisma.expense.create({
       data: {
-        groupId: groupId as string,
+        groupId: groupIdStr,
         title: title as string,
         paidBy: paidBy as string,
         currency: group.currency,
@@ -169,9 +168,10 @@ export const createExpense = async (req: Request, res: Response) => {
 export const listExpense = async (req: Request, res: Response) => {
     try {
         const { groupId } = req.params;
+        const groupIdStr = Array.isArray(groupId) ? groupId[0] : groupId;
         const { limit = "20", offset = "0" } = req.query;
 
-        if (!groupId) {
+        if (!groupIdStr) {
             return res.status(400).json({
                 error: {
                     code: "MISSING_GROUP_ID",
@@ -182,7 +182,7 @@ export const listExpense = async (req: Request, res: Response) => {
 
         const group = await prisma.group.findUnique({
             where: {
-                id: groupId as string
+                id: groupIdStr
             }
         });
 
@@ -197,7 +197,7 @@ export const listExpense = async (req: Request, res: Response) => {
 
         const expenses = await prisma.expense.findMany({
             where: {
-                groupId: groupId as string,
+                groupId: groupIdStr,
             },
             include: {
                 items: {
@@ -314,7 +314,7 @@ export const getExpenseDetails = async (req:Request , res : Response)=>{
             }
         })
     }
-}
+};
 
 
 export const updateExpense = async (req: Request , res : Response)=>{
@@ -471,7 +471,7 @@ participants :{
             }
         })
     }
-}
+};
 
 
 export const deleteExpense = async (req: Request, res: Response) => {
