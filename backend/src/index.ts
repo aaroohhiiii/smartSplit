@@ -19,7 +19,9 @@ app.use(cors({
   credentials: true,
 }));
 app.use(express.json());
-app.use(clerkMiddleware());
+// `@clerk/express` middleware typing can conflict with the Express `app.use` overloads in some TS setups.
+// This cast is type-only; at runtime the middleware function is still the same.
+app.use(clerkMiddleware() as any);
 
 
 // ─── Health check (no auth) ────────────────────────────────────────────────
@@ -48,11 +50,11 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 // ─── Export app for Vercel Functions ─────────────────────────────────────
 export default app;
 
-// // ─── Start server (local development only) ───────────────────────────────
-// if (process.env.NODE_ENV !== "production") {
-//     app.listen(PORT, () => {
-//         console.log(`✓ Server running on http://localhost:${PORT}`);
-//         console.log(`✓ CORS enabled for ${process.env.FRONTEND_URL || "http://localhost:5173"}`);
-//     });
-// }
+// ─── Start server (local development only) ───────────────────────────────
+if (process.env.NODE_ENV !== "production") {
+    app.listen(PORT, () => {
+        console.log(`✓ Server running on http://localhost:${PORT}`);
+        console.log(`✓ CORS enabled for ${process.env.FRONTEND_URL || "http://localhost:5173"}`);
+    });
+}
 
