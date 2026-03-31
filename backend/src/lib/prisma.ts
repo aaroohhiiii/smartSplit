@@ -1,18 +1,16 @@
-import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 
-const withConnectTimeout = (url: string): string => {
-  if (url.includes("connect_timeout=")) return url;
-  const separator = url.includes("?") ? "&" : "?";
-  return `${url}${separator}connect_timeout=10`;
-};
+declare global {
+  // eslint-disable-next-line no-var
+  var __prisma__: PrismaClient | undefined;
+}
 
-const dbUrl = process.env.DATABASE_URL;
-
-if (!dbUrl) {
-  // Fail fast in serverless instead of hanging on pending DB calls.
+if (!process.env.DATABASE_URL) {
   throw new Error("DATABASE_URL is not set");
 }
 
-const adapter = new PrismaPg({ connectionString: withConnectTimeout(dbUrl) });
-export const prisma = new PrismaClient({ adapter });
+export const prisma = global.__prisma__ ?? new PrismaClient();
+
+if (process.env.NODE_ENV !== "production") {
+  global.__prisma__ = prisma;
+}
