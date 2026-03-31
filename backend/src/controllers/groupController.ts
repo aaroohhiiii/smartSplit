@@ -6,6 +6,24 @@ import fs from "fs";
 import { parseBillWithGroq } from "../services/llmService";
 import { prisma } from "../lib/prisma";
 
+const DB_TIMEOUT_MS = 8000;
+
+const withDbTimeout = async <T>(operation: Promise<T>, label: string): Promise<T> => {
+    let timeoutId: NodeJS.Timeout | undefined;
+    try {
+        return await Promise.race([
+            operation,
+            new Promise<T>((_, reject) => {
+                timeoutId = setTimeout(() => {
+                    reject(new Error(`DB_TIMEOUT:${label}`));
+                }, DB_TIMEOUT_MS);
+            }),
+        ]);
+    } finally {
+        if (timeoutId) clearTimeout(timeoutId);
+    }
+};
+
 // Configure multer for bill uploads
 const billStorage = multer.diskStorage({
     destination: (req, file, cb) => {
@@ -120,7 +138,7 @@ export const createGroup = async (req: Request, res: Response) => {
             });
         }
 
-        const group = await prisma.group.create({
+        const group = await withDbTimeout(prisma.group.create({
             data: {
                 name,
                 description: description || null,
@@ -128,10 +146,10 @@ export const createGroup = async (req: Request, res: Response) => {
                 createdBy,
                 ...(initialPayer && { initialPayer }),
             },
-        });
+        }), "createGroup:group.create");
 
         // Add creator as OWNER member
-        await prisma.groupMember.create({
+        await withDbTimeout(prisma.groupMember.create({
             data: {
                 groupId: group.id,
                 userId: createdBy,
@@ -139,28 +157,28 @@ export const createGroup = async (req: Request, res: Response) => {
                 isVegetarian: false,
                 drinksAlcohol: false,
             },
-        });
+        }), "createGroup:groupMember.create");
 
         // Handle optional bill upload
         let billData = null;
         if (file) {
             try {
-                const billUploadRecord = await prisma.billUpload.create({
+                const billUploadRecord = await withDbTimeout(prisma.billUpload.create({
                     data: {
                         groupId: group.id,
                         fileUrl: file.path,
                         status: "UPLOADED",
                         uploadedBy: createdBy,
                     },
-                });
+                }), "createGroup:billUpload.create");
 
                 // Create AI processing job
-                await prisma.aIProcessingJob.create({
+                await withDbTimeout(prisma.aIProcessingJob.create({
                     data: {
                         billUploadId: billUploadRecord.id,
                         status: "QUEUED",
                     },
-                });
+                }), "createGroup:aIProcessingJob.create");
 
                 // Start async processing
                 processBillForGroupAsync(group.id, billUploadRecord.id, file.path).catch(console.error);
@@ -177,10 +195,10 @@ export const createGroup = async (req: Request, res: Response) => {
             }
         }
 
-        const groupWithMembers = await prisma.group.findUnique({
+        const groupWithMembers = await withDbTimeout(prisma.group.findUnique({
             where: { id: group.id },
             include: { members: true },
-        });
+        }), "createGroup:group.findUnique");
 
         res.status(201).json({
             ...groupWithMembers,
@@ -188,6 +206,14 @@ export const createGroup = async (req: Request, res: Response) => {
         });
     } catch (error) {
         console.error("[createGroup error]", error);
+        if (error instanceof Error && error.message.startsWith("DB_TIMEOUT:")) {
+            return res.status(504).json({
+                error: {
+                    code: "DB_TIMEOUT",
+                    message: "Database request timed out while creating group",
+                },
+            });
+        }
         res.status(500).json({
             error: {
                 code: "INTERNAL_SERVER_ERROR",
@@ -236,7 +262,7 @@ export const listGroups = async (req: Request, res: Response) => {
 
         console.log(`[listGroups] Fetching groups for userId: ${userId}`);
 
-        const groups = await prisma.group.findMany({
+        const groups = await withDbTimeout(prisma.group.findMany({
             where: {
                 members: {
                     some: {
@@ -247,7 +273,7 @@ export const listGroups = async (req: Request, res: Response) => {
             include: {
                 members: true,
             },
-        });
+        }), "listGroups:group.findMany");
 
         const groupsWithCount = groups.map((g) => ({
             ...g,
@@ -258,6 +284,14 @@ export const listGroups = async (req: Request, res: Response) => {
         res.status(200).json(groupsWithCount);
     } catch (error) {
         console.error("[listGroups error]", error);
+        if (error instanceof Error && error.message.startsWith("DB_TIMEOUT:")) {
+            return res.status(504).json({
+                error: {
+                    code: "DB_TIMEOUT",
+                    message: "Database request timed out while fetching groups",
+                },
+            });
+        }
         res.status(500).json({
             error: {
                 code: "INTERNAL_SERVER_ERROR",
@@ -280,14 +314,14 @@ export const getGroupDetails = async (req: Request, res: Response) => {
             });
         }
 
-        const group = await prisma.group.findUnique({
+        const group = await withDbTimeout(prisma.group.findUnique({
             where: {
                 id: groupId as string,
             },
             include: {
                 members: true,
             },
-        });
+        }), "getGroupDetails:group.findUnique");
 
         if (!group) {
             return res.status(404).json({
@@ -301,6 +335,14 @@ export const getGroupDetails = async (req: Request, res: Response) => {
         res.status(200).json(group);
     } catch (error) {
         console.error("[getGroupDetails error]", error);
+        if (error instanceof Error && error.message.startsWith("DB_TIMEOUT:")) {
+            return res.status(504).json({
+                error: {
+                    code: "DB_TIMEOUT",
+                    message: "Database request timed out while fetching group details",
+                },
+            });
+        }
         res.status(500).json({
             error: {
                 code: "INTERNAL_SERVER_ERROR",
