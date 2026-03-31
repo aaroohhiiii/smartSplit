@@ -8,8 +8,6 @@ import expenseRoutes from "./routes/expenseRoutes";
 import settlementRoutes from "./routes/settlementRoutes";
 import billRoutes from "./routes/billRoutes";
 
-import { clerkMiddleware } from "@clerk/express";
-
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -19,9 +17,6 @@ app.use(cors({
   credentials: true,
 }));
 app.use(express.json());
-// `@clerk/express` middleware typing can conflict with the Express `app.use` overloads in some TS setups.
-// This cast is type-only; at runtime the middleware function is still the same.
-app.use(clerkMiddleware() as any);
 
 
 // ─── Health check (no auth) ────────────────────────────────────────────────

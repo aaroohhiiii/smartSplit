@@ -10,7 +10,7 @@ import {
   removeGroupMember,
 } from "../controllers/groupController";
 
-import { verifyClerkToken } from "../middleware/auth";
+import { verifyClerkTokenLocal } from "../middleware/auth";
 const router = Router();
 
 // Public
@@ -20,10 +20,10 @@ router.get("/:groupId", getGroupDetails);
 // Protected
 // POST with multipart form-data (for optional bill image)
 // Frontend should use this when attaching a bill image
-router.post("/", verifyClerkToken, createGroupWithBill);
+router.post("/", verifyClerkTokenLocal, createGroupWithBill);
 
-router.post("/:groupId/members", verifyClerkToken, addGroupMember);
-router.patch("/:groupId/members/:memberId", verifyClerkToken, updateMemberPreferences);
-router.delete("/:groupId/members/:memberId", verifyClerkToken, removeGroupMember);
+router.post("/:groupId/members", verifyClerkTokenLocal, addGroupMember);
+router.patch("/:groupId/members/:memberId", verifyClerkTokenLocal, updateMemberPreferences);
+router.delete("/:groupId/members/:memberId", verifyClerkTokenLocal, removeGroupMember);
 
 export default router;
