@@ -202,6 +202,15 @@ export const createGroup = async (req: Request, res: Response) => {
 };
 
 export const createGroupWithBill = async (req: Request, res: Response) => {
+    const contentType = req.headers["content-type"] || "";
+    const isMultipart = typeof contentType === "string" && contentType.includes("multipart/form-data");
+
+    // For regular JSON requests (no file), skip multer entirely.
+    if (!isMultipart) {
+        await createGroup(req, res);
+        return;
+    }
+
     billUpload.single("bill")(req, res, async (err) => {
         if (err) {
             return res.status(400).json({
