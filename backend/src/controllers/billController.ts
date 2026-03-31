@@ -1,14 +1,10 @@
 import { type Request, type Response } from "express";
 import "dotenv/config";
-import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "@prisma/client";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
 import { parseBillWithGroq, validateBillParsing } from "../services/llmService";
-
-const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
-const prisma = new PrismaClient({ adapter });
+import { prisma } from "../lib/prisma";
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({

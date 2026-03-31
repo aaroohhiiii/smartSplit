@@ -1,10 +1,6 @@
 import { type Request, type Response } from "express";
 import "dotenv/config";
-import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "@prisma/client";
-
-const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
-const prisma = new PrismaClient({ adapter });
+import { prisma } from "../lib/prisma";
 
 // Helper: Calculate net balances for all group members
 const calculateGroupBalances = async (groupId: string) => {
